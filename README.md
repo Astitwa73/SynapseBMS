@@ -128,6 +128,51 @@ defeated by any bug downstream of it.
 | Lighting ≥ 30% | Egress safety |
 | No command → actuators released | Fail-safe: the building runs its own schedule |
 
+Control state is sticky: an unset field means "leave this channel alone", not
+"revert it". Only the absence of a command releases the actuators, so a decision
+to hold does not hand the building back to its own schedule.
+
+## Run autonomously
+
+```bash
+python scripts/run_autonomous.py --speed 0.05 --seconds 60
+```
+
+Simulation, comfort processing, decision policy and control running together
+with no LLM. The agent sets back overnight, protects per-zone comfort during
+occupied hours, and converts comfort headroom into savings.
+
+### Comfort and air quality
+
+PMV (ISO 7730 / ASHRAE 55) places thermal sensation on −3…+3, with ±0.5 as the
+comfortable band. The model needs six inputs; this building measures two, and
+the rest are explicit assumptions in `ComfortAssumptions` rather than literals
+buried in the calculation. At 0.5 clo and 1.1 met the implementation puts
+neutral at 25.4 °C, which matches the ASHRAE 55 summer comfort zone.
+
+CO₂ is a steady-state mass balance over occupancy and ventilation mass flow.
+It gives the equilibrium concentration, so it does not show the ramp as a room
+fills.
+
+### Decision policy
+
+A priority ladder — first rule that applies decides. Ordering encodes intent.
+
+| Priority | Condition | Action |
+| --- | --- | --- |
+| 1 | Unoccupied | Set back, dim lights |
+| 2 | Any occupied zone PMV > +0.5 | Lower setpoint |
+| 3 | Any occupied zone PMV < −0.5 | Raise setpoint |
+| 4 | Comfortable with headroom | Raise setpoint, bank savings |
+| 5 | Otherwise | Hold |
+
+Rules 2 and 3 hold instead of acting when the setpoint is already at its limit:
+relaxing a cooling setpoint stops cooling, it cannot add heat, so claiming
+otherwise would be an action that does nothing.
+
+`DecisionPolicy` is a Protocol, so the LLM policy drops in without inheriting
+anything and the rule policy doubles as its runtime fallback.
+
 ## Tests
 
 ```bash

@@ -98,8 +98,14 @@ class ActuatorRegistry:
                 self._lighting_baseline_w[zone] = power
 
     def apply(self, state, command: ControlCommand | None) -> None:
-        """Push a command to the actuators, or release them when there is none."""
-        if command is None or command.is_noop:
+        """Push a command to the actuators, or release them when there is none.
+
+        A None field means "leave this channel as it is", not "revert it". Only
+        the absence of a command releases control -- otherwise a decision to hold
+        the current setpoints would hand the building back to its own schedule,
+        which is the opposite of holding them.
+        """
+        if command is None:
             self.release(state)
             return
 
@@ -113,18 +119,24 @@ class ActuatorRegistry:
 
     def release(self, state) -> None:
         """Return every actuator to the model's own schedule."""
-        if not self._lighting_overridden and not self._handles:
-            return
-
-        reset = getattr(self._exchange, "reset_actuator", None)
-        if reset is not None:
-            for spec, handle in self._handles.items():
-                if handle != INVALID_HANDLE:
-                    reset(state, handle)
+        self._reset(state, self._handles.keys())
         self._lighting_overridden = False
 
     def _apply_lighting(self, state, fraction: float | None) -> None:
+        """Dim below full output, or hand lighting back at full output.
+
+        Releasing at fraction 1.0 rather than writing baseline x 1.0 is what
+        keeps the baseline fresh: while we are overriding, the model's own
+        lighting schedule keeps moving underneath us, and a frozen baseline would
+        drift further from it the longer the override lasted.
+        """
         if fraction is None:
+            return
+
+        if fraction >= 1.0:
+            if self._lighting_overridden:
+                self._reset(state, self._lighting_specs())
+                self._lighting_overridden = False
             return
 
         for zone in self._zone_names:
@@ -134,6 +146,18 @@ class ActuatorRegistry:
                 continue
             self._set(state, ActuatorSpec(*LIGHTS_POWER, key=lights_key), baseline * fraction)
         self._lighting_overridden = True
+
+    def _lighting_specs(self):
+        return [spec for spec in self._handles if spec.component_type == LIGHTS_POWER[0]]
+
+    def _reset(self, state, specs) -> None:
+        reset = getattr(self._exchange, "reset_actuator", None)
+        if reset is None:
+            return
+        for spec in specs:
+            handle = self._handles.get(spec, INVALID_HANDLE)
+            if handle != INVALID_HANDLE:
+                reset(state, handle)
 
     def _set(self, state, spec: ActuatorSpec, value: float | None) -> None:
         if value is None:

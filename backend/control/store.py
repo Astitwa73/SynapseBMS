@@ -14,9 +14,26 @@ from __future__ import annotations
 import logging
 import threading
 
+from dataclasses import replace
+
 from backend.control.commands import ClampResult, ControlCommand, SafetyLimits, clamp
 
 logger = logging.getLogger(__name__)
+
+_STICKY_FIELDS = ("cooling_setpoint_c", "heating_setpoint_c", "lighting_fraction")
+
+
+def _carry_forward(command: ControlCommand, current: ControlCommand | None) -> ControlCommand:
+    """Fill unset channels from the command currently in force."""
+    if current is None:
+        return command
+
+    inherited = {
+        field: getattr(current, field)
+        for field in _STICKY_FIELDS
+        if getattr(command, field) is None
+    }
+    return replace(command, **inherited) if inherited else command
 
 
 class ControlStore:
@@ -35,9 +52,16 @@ class ControlStore:
         return self._limits
 
     def submit(self, command: ControlCommand) -> ClampResult:
-        """Clamp a command and make it the one in force. Returns what was applied."""
+        """Clamp a command and make it the one in force. Returns what was applied.
+
+        The store holds the *current state of control*, not a stream of one-shot
+        messages: a field left unset carries forward from the command in force.
+        Otherwise a decision to hold would blank every channel and hand the
+        building back to its own schedule.
+        """
         with self._lock:
-            result = clamp(command, self._limits, previous=self._current)
+            merged = _carry_forward(command, self._current)
+            result = clamp(merged, self._limits, previous=self._current)
             self._current = result.command
             self._last_result = result
             self._submitted += 1

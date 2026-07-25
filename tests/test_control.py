@@ -274,3 +274,66 @@ def test_lighting_without_a_baseline_is_skipped():
     registry = make_registry(exchange)
     registry.apply(state=None, command=ControlCommand(lighting_fraction=0.5))
     assert exchange.writes == []
+
+
+# --- control is state, not a stream of one-shot messages -------------------
+
+
+def test_holding_carries_the_setpoint_forward_instead_of_blanking_it():
+    """A hold that cleared the channels would hand the building back mid-demo."""
+    store = ControlStore()
+    store.submit(cooling(26.0))
+    store.submit(ControlCommand(action=ControlAction.HOLD, source="test"))
+
+    assert store.current().cooling_setpoint_c is not None
+    assert store.current().heating_setpoint_c is not None
+
+
+def test_explicit_values_still_override_the_carried_forward_ones():
+    store = ControlStore()
+    store.submit(ControlCommand(cooling_setpoint_c=26.0, lighting_fraction=0.3))
+    store.submit(ControlCommand(lighting_fraction=1.0))
+
+    assert store.current().lighting_fraction == 1.0
+    assert store.current().cooling_setpoint_c is not None
+
+
+def test_a_noop_command_no_longer_releases_the_actuators():
+    exchange = FakeExchange()
+    registry = make_registry(exchange)
+    registry.apply(state=None, command=clamp(cooling(25.0), LIMITS).command)
+    exchange.resets.clear()
+
+    registry.apply(state=None, command=ControlCommand(action=ControlAction.HOLD))
+    assert exchange.resets == [], "holding must not hand control back"
+
+
+def test_full_lighting_releases_the_lights_but_keeps_setpoints():
+    exchange = FakeExchange()
+    registry = make_registry(exchange)
+    registry.observe_lighting({"SPACE1-1": 1000.0, "SPACE2-1": 1000.0})
+    registry.apply(state=None, command=ControlCommand(lighting_fraction=0.5))
+    exchange.resets.clear()
+
+    registry.apply(
+        state=None,
+        command=ControlCommand(cooling_setpoint_c=25.0, heating_setpoint_c=20.0,
+                               lighting_fraction=1.0),
+    )
+
+    assert len(exchange.resets) == len(ZONES), "only the lights are handed back"
+    assert 25.0 in {value for _, value in exchange.writes}
+
+
+def test_baseline_refreshes_once_lighting_is_released():
+    exchange = FakeExchange()
+    registry = make_registry(exchange)
+    registry.observe_lighting({"SPACE1-1": 1000.0, "SPACE2-1": 1000.0})
+    registry.apply(state=None, command=ControlCommand(lighting_fraction=0.5))
+
+    registry.apply(state=None, command=ControlCommand(lighting_fraction=1.0))
+    registry.observe_lighting({"SPACE1-1": 2000.0, "SPACE2-1": 2000.0})
+    exchange.writes.clear()
+    registry.apply(state=None, command=ControlCommand(lighting_fraction=0.5))
+
+    assert {value for _, value in exchange.writes} == {1000.0}, "must use the new baseline"
