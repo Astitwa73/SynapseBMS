@@ -75,5 +75,19 @@ def controllable_zone_names(idf_path: Path) -> list[str]:
     return [name for name in zone_names(idf_path) if name.casefold() in controlled]
 
 
+def lights_by_zone(idf_path: Path) -> dict[str, str]:
+    """Map each zone to its Lights object, which is the actuator key for dimming.
+
+    Actuating lighting needs the name of the Lights object, not the zone: a zone
+    may host several, and the naming convention differs between models. The
+    second field of a Lights object is the zone it serves.
+    """
+    mapping: dict[str, str] = {}
+    for fields in objects_of_type(_read(idf_path), "Lights"):
+        if len(fields) >= 2:
+            mapping.setdefault(fields[1], fields[0])
+    return mapping
+
+
 def _read(idf_path: Path) -> str:
     return idf_path.read_text(encoding="utf-8", errors="replace")

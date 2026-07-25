@@ -87,9 +87,11 @@ class EnergyReading:
 
     building_electricity_j: float | None = None
     hvac_electricity_j: float | None = None
+    plant_electricity_j: float | None = None
     cooling_electricity_j: float | None = None
     heating_electricity_j: float | None = None
     fans_electricity_j: float | None = None
+    pumps_electricity_j: float | None = None
     interior_lights_electricity_j: float | None = None
     interior_equipment_electricity_j: float | None = None
 
@@ -98,11 +100,22 @@ class EnergyReading:
         """Whole-building electricity.
 
         Derived rather than read from Electricity:Facility, which this model does
-        not expose. Building covers lights and plug loads, HVAC covers cooling,
-        heating and fans; with no exterior loads in the model the two are
-        exhaustive and disjoint.
+        not expose. EnergyPlus meters electricity on two independent axes, and
+        mixing them double-counts:
+
+          system category (disjoint)  Building + HVAC + Plant
+          end use (disjoint)          Lights + Equipment + Fans + Cooling + Pumps
+
+        Only the system-category meters are summed here. Plant matters: this
+        model cools through a chilled-water loop, so the chiller and its pumps
+        are metered under Plant, not HVAC. Omitting it hides exactly the energy
+        the agent is controlling.
         """
-        parts = [self.building_electricity_j, self.hvac_electricity_j]
+        parts = [
+            self.building_electricity_j,
+            self.hvac_electricity_j,
+            self.plant_electricity_j,
+        ]
         present = [value for value in parts if value is not None]
         return sum(present) if present else None
 

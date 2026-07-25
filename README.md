@@ -90,8 +90,43 @@ produce them:
 | CO₂ / air quality | Steady-state mass balance from occupant count and mechanical ventilation mass flow |
 | PMV comfort | Fanger model from zone temperature and relative humidity |
 
-Whole-building electricity is likewise derived as `Electricity:Building +
-Electricity:HVAC`; this model exposes no `Electricity:Facility` meter.
+This model exposes no `Electricity:Facility` meter, so whole-building
+electricity is derived. EnergyPlus meters electricity on two independent axes
+and mixing them double-counts:
+
+| Axis | Meters | Use |
+| --- | --- | --- |
+| System category (disjoint) | `Electricity:Building` + `Electricity:HVAC` + `Electricity:Plant` | Totalling |
+| End use (disjoint) | Lights, Equipment, Fans, Cooling, Pumps | Attribution |
+
+`Electricity:Plant` matters: this model cools through a chilled-water loop, so
+the chiller and its pumps are metered under Plant rather than HVAC. Omitting it
+hides the very energy the agent controls.
+
+## Verify the control loop
+
+```bash
+python scripts/verify_control.py
+```
+
+Runs the same summer day twice, with and without a setpoint command, and reports
+the difference. Expect roughly 30% cooling energy saved for a 2.1 °C setpoint
+increase, at the cost of about 2 °C higher peak indoor temperature.
+
+### Safety
+
+The agent never writes to an actuator. Commands pass through `ControlStore`,
+which clamps them at the boundary closest to the effect — the last component
+before the actuator owns the invariant, because a limit enforced upstream can be
+defeated by any bug downstream of it.
+
+| Rule | Why |
+| --- | --- |
+| Cooling 22–28 °C, heating 16–20 °C | Comfort envelope |
+| Heating ≤ cooling − 2 °C | **EnergyPlus terminates** on an inverted deadband, so a bad setpoint would end the demo |
+| Max 0.5 °C change per timestep | Prevents HVAC surges and damps agent oscillation |
+| Lighting ≥ 30% | Egress safety |
+| No command → actuators released | Fail-safe: the building runs its own schedule |
 
 ## Tests
 

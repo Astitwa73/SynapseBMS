@@ -53,12 +53,18 @@ SITE_VARIABLES: tuple[tuple[str, str], ...] = (
 )
 
 # (EnergyReading field, EnergyPlus meter name). Meters need no request step.
+#
+# The first three are system-category meters and are disjoint, so they sum to
+# whole-building electricity. The rest are end-use meters covering the same
+# energy along a different axis -- useful for attribution, never for totalling.
 METERS: tuple[tuple[str, str], ...] = (
     ("building_electricity_j", "Electricity:Building"),
     ("hvac_electricity_j", "Electricity:HVAC"),
+    ("plant_electricity_j", "Electricity:Plant"),
     ("cooling_electricity_j", "Cooling:Electricity"),
     ("heating_electricity_j", "Heating:Electricity"),
     ("fans_electricity_j", "Fans:Electricity"),
+    ("pumps_electricity_j", "Pumps:Electricity"),
     ("interior_lights_electricity_j", "InteriorLights:Electricity"),
     ("interior_equipment_electricity_j", "InteriorEquipment:Electricity"),
 )

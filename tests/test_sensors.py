@@ -123,17 +123,29 @@ def test_unavailable_meter_becomes_none(catalog):
 
     assert energy.building_electricity_j is None
     assert energy.hvac_electricity_j is not None
-    assert energy.total_electricity_j == energy.hvac_electricity_j
+    assert energy.total_electricity_j == pytest.approx(
+        energy.hvac_electricity_j + energy.plant_electricity_j
+    )
 
 
-def test_total_electricity_sums_building_and_hvac(catalog):
+def test_total_sums_system_category_meters_only(catalog):
+    """End-use meters cover the same energy on another axis; adding them double-counts."""
     reader = SensorReader(FakeExchange(), catalog)
     reader.resolve_handles(state=None)
     energy = reader.read(state=None).energy
 
     assert energy.total_electricity_j == pytest.approx(
-        energy.building_electricity_j + energy.hvac_electricity_j
+        energy.building_electricity_j + energy.hvac_electricity_j + energy.plant_electricity_j
     )
+
+
+def test_total_includes_plant_where_chilled_water_cooling_is_metered(catalog):
+    reader = SensorReader(FakeExchange(), catalog)
+    reader.resolve_handles(state=None)
+    energy = reader.read(state=None).energy
+
+    without_plant = energy.building_electricity_j + energy.hvac_electricity_j
+    assert energy.total_electricity_j > without_plant
 
 
 def test_meter_table_matches_energy_reading_fields(catalog):

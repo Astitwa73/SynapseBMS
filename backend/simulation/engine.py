@@ -22,8 +22,12 @@ import threading
 import time
 from dataclasses import dataclass
 
+from collections.abc import Mapping
+
 from backend.config.paths import default_weather_file, ensure_pyenergyplus_importable
 from backend.config.settings import SimulationSettings
+from backend.control.actuators import ActuatorRegistry
+from backend.control.store import ControlStore
 from backend.simulation.sensors import SensorCatalog, SensorReader
 from backend.simulation.state import SimulationStateStore
 
@@ -50,10 +54,15 @@ class SimulationEngine:
         settings: SimulationSettings,
         catalog: SensorCatalog,
         store: SimulationStateStore,
+        control: ControlStore | None = None,
+        lights_by_zone: Mapping[str, str] | None = None,
     ) -> None:
         self._settings = settings
         self._catalog = catalog
         self._store = store
+        self._control = control
+        self._lights_by_zone = lights_by_zone or {}
+        self._actuators: ActuatorRegistry | None = None
 
         self._thread: threading.Thread | None = None
         self._stop_requested = threading.Event()
@@ -114,6 +123,17 @@ class SimulationEngine:
                 state, self._make_timestep_callback(api, reader)
             )
 
+            # Writes must land before the predictor computes zone loads. Setting a
+            # setpoint at the end of a timestep appears to succeed and changes
+            # nothing until the next one.
+            if self._control is not None:
+                self._actuators = ActuatorRegistry(
+                    api.exchange, self._catalog.zone_names, self._lights_by_zone
+                )
+                api.runtime.callback_begin_zone_timestep_after_init_heat_balance(
+                    state, self._make_control_callback(api)
+                )
+
             command = self._build_command()
             logger.info("Starting EnergyPlus: %s", " ".join(command))
             self._next_deadline = time.perf_counter()
@@ -151,6 +171,34 @@ class SimulationEngine:
                 logger.exception("Sensor callback failed; simulation continues")
 
         return on_timestep
+
+    def _make_control_callback(self, api):
+        """Build the callback that applies the current command before the predictor."""
+
+        def on_begin_timestep(state) -> None:
+            try:
+                self._apply_control(api, state)
+            except Exception:  # noqa: BLE001 - must not unwind into EnergyPlus C code
+                logger.exception("Control callback failed; simulation continues")
+
+        return on_begin_timestep
+
+    def _apply_control(self, api, state) -> None:
+        if self._actuators is None or self._stop_requested.is_set():
+            return
+        if not api.exchange.api_data_fully_ready(state) or api.exchange.warmup_flag(state):
+            return
+
+        if not self._actuators.is_resolved:
+            self._actuators.resolve_handles(state)
+
+        snapshot = self._store.latest()
+        if snapshot is not None:
+            self._actuators.observe_lighting(
+                {zone.name: zone.lighting_power_w for zone in snapshot.zones}
+            )
+
+        self._actuators.apply(state, self._control.current() if self._control else None)
 
     def _handle_timestep(self, api, reader: SensorReader, state) -> None:
         if self._stop_requested.is_set():
