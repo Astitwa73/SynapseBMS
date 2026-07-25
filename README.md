@@ -173,6 +173,70 @@ otherwise would be an action that does nothing.
 `DecisionPolicy` is a Protocol, so the LLM policy drops in without inheriting
 anything and the rule policy doubles as its runtime fallback.
 
+## Run under LLM control
+
+```bash
+ollama pull llama3
+```
+
+```bash
+python scripts/verify_agent.py
+```
+
+```bash
+python scripts/run_autonomous.py --policy llm --speed 0.05 --seconds 60
+```
+
+`verify_agent.py` is the pre-demo check: it puts five building states past the
+model and reports the action, the reasoning and the latency. Latency is the
+number that matters — a model slower than the decision cadence will spend the
+demo falling back to the rule engine. If 8B is too slow, `--llm-model
+llama3.2:3b` is a one-flag change.
+
+### The model chooses an action, never a number
+
+```
+LLM  ->  {"action": "raise_setpoint", "reasoning": "..."}
+code ->  setpoint = current + 1.0 C, clamped, rate-limited
+```
+
+Language models are good at classification and explanation and bad at
+arithmetic. Restricting the output to one of four labels removes unit confusion,
+off-by-degrees errors and hallucinated precision, and makes an unrecognised
+response detectable rather than plausible. It also makes the LLM and the rule
+engine comparable: identical action space, identical arithmetic, different
+judgment.
+
+| Layer | Protects against |
+| --- | --- |
+| `format: "json"`, `temperature: 0` | Unparseable output; irreproducible demos |
+| Closed action set | Invented commands |
+| Deterministic translation | Bad arithmetic |
+| Safety clamp (Module 2) | Valid but unwise choices |
+| Rule-policy fallback | Slow, unreachable or malformed model |
+
+Measured with a stub failing half its responses: 100 decisions, 51 from the
+model and 49 from the fallback, zero simulation errors.
+
+### Prompt: state the domain semantics, not just the rules
+
+The first prompt listed the four actions and described when to use them. Llama 3
+then chose `lower_setpoint` for an over-cooled zone, reasoning that the space was
+"too cool, so adjust cooling setpoint to improve comfort" — the right diagnosis
+with the setpoint moved the wrong way. It had learned that comfort complaints are
+answered by cooling, and nothing in the prompt said that *raising* a setpoint
+makes a room warmer.
+
+Adding that mapping explicitly — negative PMV means occupants feel cold, raising
+the setpoint warms the room and saves energy — took scenario accuracy from 3/5 to
+10/10 across two runs, with identical choices on repeat runs at temperature 0.
+
+Suggested demo settings, giving one decision roughly every six seconds:
+
+```bash
+python scripts/run_autonomous.py --policy llm --speed 0.4 --decide-every 12
+```
+
 ## Tests
 
 ```bash

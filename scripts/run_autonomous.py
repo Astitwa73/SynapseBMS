@@ -28,6 +28,8 @@ from backend.config.settings import (  # noqa: E402
     CalendarDay,
     SimulationSettings,
 )
+from backend.agent.llm_policy import LlmPolicy  # noqa: E402
+from backend.agent.ollama_client import OllamaClient, OllamaError, OllamaSettings  # noqa: E402
 from backend.control.store import ControlStore  # noqa: E402
 from backend.decision.loop import DecisionLoop  # noqa: E402
 from backend.decision.policy import RuleBasedPolicy  # noqa: E402
@@ -57,6 +59,8 @@ def main() -> int:
     parser.add_argument(
         "--decide-every", type=int, default=4, help="timesteps per decision (4 = hourly)"
     )
+    parser.add_argument("--policy", choices=("rule", "llm"), default="rule")
+    parser.add_argument("--llm-model", default="llama3", help="Ollama model name")
     args = parser.parse_args()
 
     configure_logging(logging.WARNING)
@@ -71,7 +75,22 @@ def main() -> int:
 
     state = SimulationStateStore()
     control = ControlStore()
-    policy = RuleBasedPolicy()
+
+    # The rule policy is always constructed: as the chosen policy, or as the
+    # fallback the loop switches to when the model is slow or malformed.
+    rules = RuleBasedPolicy()
+    policy = rules
+    fallback = None
+
+    if args.policy == "llm":
+        client = OllamaClient(OllamaSettings(model=args.llm_model))
+        try:
+            client.check_ready()
+        except OllamaError as exc:
+            print(f"FAIL: {exc}")
+            return 1
+        policy = LlmPolicy(client=client)
+        fallback = rules
 
     engine = SimulationEngine(
         settings=SimulationSettings(
@@ -84,11 +103,17 @@ def main() -> int:
         control=control,
         lights_by_zone=lights_by_zone(model_path),
     )
-    loop = DecisionLoop(policy, state, control, timesteps_per_decision=args.decide_every)
+    loop = DecisionLoop(
+        policy, state, control,
+        timesteps_per_decision=args.decide_every,
+        fallback=fallback,
+    )
 
     print(f"Model  : {model_path.name}")
     print(f"Zones  : {', '.join(zones)}")
     print(f"Policy : {policy.name}, deciding every {args.decide_every} timesteps")
+    if fallback is not None:
+        print(f"Fallback: {fallback.name}")
     print(f"Start  : {args.from_date}\n")
 
     try:
@@ -124,6 +149,8 @@ def main() -> int:
     print(f"Decisions taken     : {len(records)}")
     print(f"Commands clamped    : {adjusted}/{submitted}")
     print(f"Policy failures     : {loop.failure_count}")
+    if isinstance(policy, LlmPolicy) and policy.mean_latency_seconds is not None:
+        print(f"Mean LLM latency    : {policy.mean_latency_seconds:.2f}s")
     print(f"Actions             : {actions or 'none'}")
 
     if engine.status().error:

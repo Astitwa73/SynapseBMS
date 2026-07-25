@@ -65,7 +65,11 @@ class SafetyLimits:
     min_deadband_c: float = 2.0
     min_lighting_fraction: float = 0.3
     max_lighting_fraction: float = 1.0
-    max_setpoint_change_c: float = 0.5
+    # Matched to the policies' 1C action step. Set lower, it clamped every single
+    # setpoint change, which is noise rather than protection: an action already
+    # targets current +/- one step. The limit still binds on an absolute jump,
+    # such as a setback straight to 28C or a bad command asking for the extreme.
+    max_setpoint_change_c: float = 1.0
 
 
 @dataclass(frozen=True, slots=True)

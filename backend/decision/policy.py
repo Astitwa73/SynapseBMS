@@ -87,7 +87,7 @@ class RuleBasedPolicy:
         self._limits = limits or SafetyLimits()
 
     def decide(self, context: BuildingContext) -> Decision:
-        observations = _observe(context)
+        observations = observe(context)
 
         for rule in (self._setback, self._relieve_warmth, self._relieve_cold, self._harvest):
             decision = rule(context, observations)
@@ -248,7 +248,7 @@ def _band_text(zone: ZoneContext) -> str:
     return zone.comfort.value if zone.comfort else "unknown"
 
 
-def _observe(context: BuildingContext) -> tuple[str, ...]:
+def observe(context: BuildingContext) -> tuple[str, ...]:
     """The facts behind the decision, for the dashboard and the audit trail."""
     observations = [
         f"time {context.clock.label}",

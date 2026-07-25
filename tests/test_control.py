@@ -167,7 +167,9 @@ def test_store_rate_limits_against_the_previous_command():
     store = ControlStore()
     store.submit(cooling(24.0))
     store.submit(cooling(28.0))
-    assert store.current().cooling_setpoint_c == pytest.approx(24.5)
+    assert store.current().cooling_setpoint_c == pytest.approx(
+        24.0 + LIMITS.max_setpoint_change_c
+    )
 
 
 def test_release_returns_control_to_the_building():
