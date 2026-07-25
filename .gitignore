@@ -12,3 +12,8 @@ run_output/
 node_modules/
 frontend/dist/
 .env
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+backend/api/static/

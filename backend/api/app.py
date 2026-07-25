@@ -9,9 +9,12 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from backend.api import routes, websocket
 from backend.config.logging import configure_logging
@@ -21,6 +24,11 @@ logger = logging.getLogger(__name__)
 
 # The dashboard is served by Vite in development, on its own origin.
 DEV_ORIGINS = ("http://localhost:5173", "http://127.0.0.1:5173")
+
+# The built bundle, written here by `npm run build`. Serving it from the same
+# process means the demo is one command and one URL, with no chance of starting
+# the API and forgetting the dashboard.
+STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
 def create_app(config: ServiceConfig | None = None, autostart: bool = True) -> FastAPI:
@@ -64,7 +72,26 @@ def create_app(config: ServiceConfig | None = None, autostart: bool = True) -> F
         """Liveness only: reports that the API is up, not that the building is."""
         return {"status": "ok"}
 
+    _mount_dashboard(app)
     return app
+
+
+def _mount_dashboard(app: FastAPI) -> None:
+    """Serve the built dashboard, if it has been built.
+
+    Mounted last so it cannot shadow the API routes, and skipped entirely when
+    the bundle is absent -- during development the dashboard is served by Vite,
+    and a missing directory there is expected rather than an error.
+    """
+    if not STATIC_DIR.is_dir():
+        logger.info("No built dashboard at %s; serving API only", STATIC_DIR)
+        return
+
+    app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
+
+    @app.get("/", include_in_schema=False)
+    def dashboard() -> FileResponse:
+        return FileResponse(STATIC_DIR / "index.html")
 
 
 configure_logging()

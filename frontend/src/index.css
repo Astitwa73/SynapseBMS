@@ -1,0 +1,112 @@
+@import "tailwindcss";
+
+/* Design tokens.
+ *
+ * A light enterprise palette pushed harder on contrast than a typical light
+ * theme, because this is read on a projector in a lit room: mid-greys that look
+ * refined on a laptop turn to mush at three metres. Body text sits at ~12:1
+ * against the surface, and every status colour clears 4.5:1.
+ *
+ * Status colour is semantic only. Nothing is coloured for decoration, so a
+ * coloured element on this dashboard always means something. */
+@theme {
+  --color-canvas: #eef1f5;
+  --color-surface: #ffffff;
+  --color-sunken: #f5f7fa;
+  --color-line: #d3d9e2;
+  --color-line-strong: #b4bdcb;
+
+  --color-ink: #0d1421;
+  --color-muted: #4a5566;
+  --color-faint: #6b7789;
+
+  /* Honeywell-adjacent red, reserved for brand and the active accent. */
+  --color-brand: #d0202f;
+  --color-brand-dark: #a81826;
+  --color-brand-tint: #fdeaec;
+
+  --color-ok: #0f7a4a;
+  --color-ok-tint: #e3f5ec;
+  --color-warn: #a35700;
+  --color-warn-tint: #fdf0dd;
+  --color-crit: #b3231f;
+  --color-crit-tint: #fdeae9;
+  --color-info: #14568c;
+  --color-info-tint: #e6f0f9;
+
+  /* Comfort scale, cold to hot. Matched in lightness so no band shouts. */
+  --color-pmv-cold: #2f6fb5;
+  --color-pmv-cool: #6fa3d1;
+  --color-pmv-good: #2f9e63;
+  --color-pmv-warm: #d99022;
+  --color-pmv-hot: #c8442f;
+
+  --font-sans: "Segoe UI", "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "Cascadia Mono", "JetBrains Mono", "Consolas", monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Every live figure uses this. Proportional digits change width as they update,
+ * so a value ticking from 9.9 to 10.0 shifts everything beside it. That jitter
+ * is the most obvious tell of an amateur dashboard. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* Motion is opt-out at the source rather than per component, so a new animation
+ * cannot forget to respect the preference. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgb(208 32 47 / 0.35);
+  }
+  70% {
+    box-shadow: 0 0 0 7px rgb(208 32 47 / 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgb(208 32 47 / 0);
+  }
+}
+
+@keyframes flow-dash {
+  to {
+    stroke-dashoffset: -14;
+  }
+}
+
+.animate-pulse-ring {
+  animation: pulse-ring 1.6s ease-out infinite;
+}
+
+.animate-flow {
+  stroke-dasharray: 4 3;
+  animation: flow-dash 0.7s linear infinite;
+}
+
+::selection {
+  background: var(--color-brand-tint);
+}
