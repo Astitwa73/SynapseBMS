@@ -41,9 +41,14 @@ class EngineStatus:
     """What the rest of the system is allowed to know about the engine."""
 
     is_running: bool
+    is_paused: bool
     timesteps_published: int
     exit_code: int | None
     error: str | None
+    variables_resolved: int = 0
+    variables_requested: int = 0
+    meters_resolved: int = 0
+    meters_requested: int = 0
 
 
 class SimulationEngine:
@@ -73,6 +78,14 @@ class SimulationEngine:
         self._error: str | None = None
         self._next_deadline = 0.0
         self._reporting_started = False
+        self._reader: SensorReader | None = None
+
+        # Pausing holds the simulation inside its own callback, which is the only
+        # place EnergyPlus can be safely stalled. Stepping releases a fixed number
+        # of timesteps, so a presenter can advance exactly one decision.
+        self._paused = threading.Event()
+        self._step_budget = 0
+        self._step_lock = threading.Lock()
 
     def start(self) -> None:
         if self._thread is not None:
@@ -98,16 +111,42 @@ class SimulationEngine:
     def wait_until_finished(self, timeout: float | None = None) -> bool:
         return self._finished.wait(timeout)
 
+    def pause(self) -> None:
+        self._paused.set()
+
+    def resume(self) -> None:
+        with self._step_lock:
+            self._step_budget = 0
+        self._paused.clear()
+
+    def step(self, timesteps: int = 1) -> None:
+        """Release a fixed number of timesteps, then pause again."""
+        with self._step_lock:
+            self._step_budget = max(1, timesteps)
+        self._paused.set()
+
+    @property
+    def is_paused(self) -> bool:
+        return self._paused.is_set()
+
     @property
     def is_running(self) -> bool:
         return self._thread is not None and self._thread.is_alive()
 
     def status(self) -> EngineStatus:
+        variables_ok, variables_total, meters_ok, meters_total = (
+            self._reader.health if self._reader and self._reader.is_resolved else (0, 0, 0, 0)
+        )
         return EngineStatus(
             is_running=self.is_running,
+            is_paused=self.is_paused,
             timesteps_published=self._store.published_count,
             exit_code=self._exit_code,
             error=self._error,
+            variables_resolved=variables_ok,
+            variables_requested=variables_total,
+            meters_resolved=meters_ok,
+            meters_requested=meters_total,
         )
 
     def _run(self) -> None:
@@ -117,6 +156,7 @@ class SimulationEngine:
         api = EnergyPlusAPI()
         state = api.state_manager.new_state()
         reader = SensorReader(api.exchange, self._catalog)
+        self._reader = reader
 
         try:
             api.runtime.set_console_output_status(state, False)
@@ -243,12 +283,37 @@ class SimulationEngine:
         logger.info("Reporting started at %02d-%02d", *calendar_day)
         return True
 
+    def _wait_while_paused(self) -> None:
+        """Block inside the EnergyPlus callback until resumed or stepped.
+
+        The early return matters: resetting the deadline on every timestep, not
+        only after a pause, leaves it permanently equal to now, so the throttle
+        computes no remaining time and never sleeps. That silently disables
+        pacing entirely and the simulation runs a whole year in seconds.
+        """
+        if not self._paused.is_set():
+            return
+
+        try:
+            while self._paused.is_set() and not self._stop_requested.is_set():
+                with self._step_lock:
+                    if self._step_budget > 0:
+                        self._step_budget -= 1
+                        return
+                time.sleep(0.05)
+        finally:
+            # A pause of any length would leave the deadline far in the past,
+            # and the simulation would sprint to catch up on resume.
+            self._next_deadline = time.perf_counter()
+
     def _throttle(self) -> None:
         """Pace the simulation to wall-clock time using absolute deadlines.
 
         Deadline-based rather than a flat sleep so that time spent reading
         sensors does not accumulate into drift over a long run.
         """
+        self._wait_while_paused()
+
         interval = self._settings.seconds_per_timestep
         if interval <= 0:
             return

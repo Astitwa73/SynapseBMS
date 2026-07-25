@@ -16,11 +16,12 @@ from __future__ import annotations
 import logging
 import threading
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 
 from backend.control.commands import ClampResult
 from backend.control.store import ControlStore
+from backend.decision.explain import current_objective, expected_impact
 from backend.decision.policy import Decision, DecisionPolicy
 from backend.processing.air_quality import AirQualityAssumptions
 from backend.processing.comfort import ComfortAssumptions
@@ -42,9 +43,22 @@ class DecisionRecord:
     context: BuildingContext
     decided_at: datetime
 
+    # What the deterministic baseline would have chosen for the same context.
+    # Present only when a baseline policy exists, which is when the language
+    # model is driving. Agreement is a measured signal, unlike a model's
+    # self-reported confidence, which is unverifiable and poorly calibrated.
+    baseline_action: str | None = None
+    used_fallback: bool = False
+
     @property
     def was_adjusted(self) -> bool:
         return self.clamp.was_adjusted
+
+    @property
+    def baseline_agrees(self) -> bool | None:
+        if self.baseline_action is None:
+            return None
+        return self.baseline_action == self.decision.action.value
 
 
 class DecisionLoop:
@@ -129,7 +143,25 @@ class DecisionLoop:
             comfort_assumptions=self._comfort,
             air_quality_assumptions=self._air_quality,
         )
-        decision = self._run_policy(context)
+
+        used_fallback = False
+        try:
+            decision = self._policy.decide(context)
+        except Exception:
+            if self._fallback is None:
+                raise
+            self._failures += 1
+            logger.exception(
+                "Policy %s failed; falling back to %s", self._policy.name, self._fallback.name
+            )
+            decision = self._fallback.decide(context)
+            used_fallback = True
+
+        decision = replace(
+            decision,
+            impact=expected_impact(decision.command.action, context),
+            objective=current_objective(decision.command.action, context),
+        )
         clamp_result = self._control.submit(decision.command)
 
         record = DecisionRecord(
@@ -137,24 +169,26 @@ class DecisionLoop:
             clamp=clamp_result,
             context=context,
             decided_at=datetime.now(timezone.utc),
+            baseline_action=self._baseline_action(context, used_fallback),
+            used_fallback=used_fallback,
         )
         with self._lock:
             self._history.append(record)
 
         logger.info("[%s] %s", decision.action.value, decision.reasoning)
 
-    def _run_policy(self, context: BuildingContext) -> Decision:
-        """Run the policy, falling back to a deterministic one if it fails.
+    def _baseline_action(self, context: BuildingContext, used_fallback: bool) -> str | None:
+        """What the deterministic policy would choose for the same building state.
 
-        This is why DecisionPolicy is a narrow interface: an unreliable policy
-        can be swapped for a reliable one at the moment it misbehaves.
+        Cheap enough to run on every decision -- the rule ladder is arithmetic --
+        and it turns "do we trust the model" into something observable. Skipped
+        when the fallback already produced the decision, since a policy cannot
+        meaningfully agree with itself.
         """
+        if self._fallback is None or used_fallback:
+            return None
         try:
-            return self._policy.decide(context)
-        except Exception:
-            if self._fallback is None:
-                raise
-            self._failures += 1
-            logger.exception("Policy %s failed; falling back to %s",
-                             self._policy.name, self._fallback.name)
-            return self._fallback.decide(context)
+            return self._fallback.decide(context).command.action.value
+        except Exception:  # noqa: BLE001 - a broken baseline must not lose the decision
+            logger.exception("Baseline comparison failed")
+            return None

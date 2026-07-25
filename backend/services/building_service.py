@@ -27,9 +27,11 @@ from backend.control.commands import ClampResult, ControlAction, ControlCommand,
 from backend.control.store import ControlStore
 from backend.decision.loop import DecisionLoop, DecisionRecord
 from backend.decision.policy import DecisionPolicy, PolicyTuning, RuleBasedPolicy
+from backend.processing.carbon import carbon_kg
 from backend.processing.context import BuildingContext, build_context
 from backend.reports.summary import BuildingReport, build_report
 from backend.simulation.engine import SimulationEngine
+from backend.simulation.geometry import BuildingGeometry, read_geometry
 from backend.simulation.idf import controllable_zone_names, lights_by_zone
 from backend.simulation.sensors import SensorCatalog
 from backend.simulation.state import SensorSnapshot, SimulationStateStore
@@ -68,6 +70,13 @@ class ServiceStatus:
     policy_name: str
     llm_latency_seconds: float | None
     error: str | None
+    is_paused: bool = False
+    variables_resolved: int = 0
+    variables_requested: int = 0
+    meters_resolved: int = 0
+    meters_requested: int = 0
+    total_energy_kwh: float = 0.0
+    total_carbon_kg: float = 0.0
 
 
 class BuildingService:
@@ -88,6 +97,7 @@ class BuildingService:
         self._loop: DecisionLoop | None = None
         self._lock = threading.Lock()
         self._zone_names: tuple[str, ...] = ()
+        self._geometry: BuildingGeometry | None = None
 
         # A startup failure must be visible through the API. Otherwise the server
         # comes up, reports no error, and simply never produces data.
@@ -108,6 +118,7 @@ class BuildingService:
                 )
 
             self._zone_names = tuple(controllable_zone_names(model_path))
+            self._geometry = read_geometry(model_path, self._zone_names)
             self._policy, fallback = self._build_policy()
 
             self._engine = SimulationEngine(
@@ -175,10 +186,38 @@ class BuildingService:
     def zone_names(self) -> tuple[str, ...]:
         return self._zone_names
 
+    @property
+    def geometry(self) -> BuildingGeometry | None:
+        return self._geometry
+
+    def cumulative_energy(self) -> tuple[float, float]:
+        """(kWh, kg CO2e) since the run began."""
+        joules = sum(
+            snapshot.energy.total_electricity_j or 0.0
+            for snapshot in self._state.history()
+        )
+        kwh = joules / 3.6e6
+        return kwh, carbon_kg(kwh) or 0.0
+
+    def pause(self) -> None:
+        if self._engine is not None:
+            self._engine.pause()
+
+    def resume(self) -> None:
+        if self._engine is not None:
+            self._engine.resume()
+
+    def step_one_decision(self) -> None:
+        """Advance exactly one agent decision, then pause again."""
+        if self._engine is not None:
+            self._engine.step(self._config.timesteps_per_decision)
+
     def status(self) -> ServiceStatus:
         submitted, adjusted = self._control.counters
         engine = self._engine
         loop = self._loop
+        engine_status = engine.status() if engine else None
+        energy_kwh, carbon = self.cumulative_energy()
 
         return ServiceStatus(
             simulation_running=engine.is_running if engine else False,
@@ -190,7 +229,14 @@ class BuildingService:
             commands_adjusted=adjusted,
             policy_name=self._policy.name,
             llm_latency_seconds=self._llm.mean_latency_seconds if self._llm else None,
-            error=self._startup_error or (engine.status().error if engine else None),
+            error=self._startup_error or (engine_status.error if engine_status else None),
+            is_paused=engine_status.is_paused if engine_status else False,
+            variables_resolved=engine_status.variables_resolved if engine_status else 0,
+            variables_requested=engine_status.variables_requested if engine_status else 0,
+            meters_resolved=engine_status.meters_resolved if engine_status else 0,
+            meters_requested=engine_status.meters_requested if engine_status else 0,
+            total_energy_kwh=energy_kwh,
+            total_carbon_kg=carbon,
         )
 
     def current(self) -> BuildingContext | None:

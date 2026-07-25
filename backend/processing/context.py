@@ -68,6 +68,7 @@ class ZoneContext:
     comfort: ComfortBand | None
     co2_ppm: float | None
     air_quality: AirQualityBand | None
+    ventilation_mass_flow_kg_s: float | None = None
 
     @property
     def is_occupied(self) -> bool:
@@ -196,4 +197,5 @@ def _build_zone(zone, comfort_assumptions, air_quality_assumptions) -> ZoneConte
         comfort=band,
         co2_ppm=co2,
         air_quality=air_quality_band(co2),
+        ventilation_mass_flow_kg_s=zone.ventilation_mass_flow_kg_s,
     )

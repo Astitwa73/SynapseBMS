@@ -18,8 +18,10 @@ from pydantic import BaseModel, Field
 from backend.control.commands import ClampResult, SafetyLimits
 from backend.decision.loop import DecisionRecord
 from backend.decision.policy import PolicyTuning
+from backend.processing.carbon import GRID_CARBON_BASIS, carbon_kg
 from backend.processing.context import BuildingContext, ZoneContext
 from backend.reports.summary import BuildingReport, render_markdown
+from backend.simulation.geometry import BuildingGeometry
 from backend.services.building_service import ServiceConfig, ServiceStatus
 
 
@@ -42,6 +44,7 @@ class ZoneOut(BaseModel):
     comfort: str | None
     co2_ppm: float | None
     air_quality: str | None
+    ventilation_kg_s: float | None
 
     @classmethod
     def from_domain(cls, zone: ZoneContext) -> "ZoneOut":
@@ -56,6 +59,7 @@ class ZoneOut(BaseModel):
             comfort=zone.comfort.value if zone.comfort else None,
             co2_ppm=zone.co2_ppm,
             air_quality=zone.air_quality.value if zone.air_quality else None,
+            ventilation_kg_s=zone.ventilation_mass_flow_kg_s,
         )
 
 
@@ -67,6 +71,7 @@ class PowerOut(BaseModel):
     lighting_kw: float | None
     equipment_kw: float | None
     total_kw: float | None
+    carbon_kg_per_hour: float | None = None
 
 
 class SiteOut(BaseModel):
@@ -114,7 +119,10 @@ class MetricsOut(BaseModel):
                 outdoor_humidity_pct=context.site.outdoor_relative_humidity_pct,
                 solar_w_per_m2=context.site.direct_solar_w_per_m2,
             ),
-            power=PowerOut(**asdict(context.power)),
+            power=PowerOut(
+                **asdict(context.power),
+                carbon_kg_per_hour=carbon_kg(context.power.total_kw),
+            ),
             summary=SummaryOut(
                 total_occupancy=context.total_occupancy,
                 is_occupied=context.is_occupied,
@@ -139,6 +147,12 @@ class DecisionOut(BaseModel):
     lighting_fraction: float | None
     safety_adjustments: list[str]
     decided_at: str
+    objective: str | None
+    impact: dict | None
+    baseline_action: str | None
+    baseline_agrees: bool | None
+    used_fallback: bool
+    requested_setpoint_c: float | None
 
     @classmethod
     def from_domain(cls, record: DecisionRecord) -> "DecisionOut":
@@ -154,6 +168,14 @@ class DecisionOut(BaseModel):
             lighting_fraction=command.lighting_fraction,
             safety_adjustments=list(record.clamp.adjustments),
             decided_at=record.decided_at.isoformat(),
+            objective=record.decision.objective,
+            impact=asdict(record.decision.impact) if record.decision.impact else None,
+            baseline_action=record.baseline_action,
+            baseline_agrees=record.baseline_agrees,
+            used_fallback=record.used_fallback,
+            # What the policy asked for before clamping, so the safety pipeline
+            # can show request and applied side by side.
+            requested_setpoint_c=record.decision.command.cooling_setpoint_c,
         )
 
 
@@ -168,6 +190,13 @@ class StatusOut(BaseModel):
     policy_name: str
     llm_latency_seconds: float | None
     error: str | None
+    is_paused: bool
+    variables_resolved: int
+    variables_requested: int
+    meters_resolved: int
+    meters_requested: int
+    total_energy_kwh: float
+    total_carbon_kg: float
 
     @classmethod
     def from_domain(cls, status: ServiceStatus) -> "StatusOut":
@@ -264,4 +293,49 @@ class ReportOut(BaseModel):
             agent=asdict(report.agent),
             savings=asdict(report.savings),
             markdown=render_markdown(report),
+        )
+
+
+class ZoneGeometryOut(BaseModel):
+    """A zone's real plan footprint, read from the EnergyPlus model."""
+
+    name: str
+    footprint: list[list[float]]
+    area_m2: float
+    centroid: list[float]
+    is_core: bool
+    orientation: str | None
+    azimuth_deg: float | None
+
+
+class GeometryOut(BaseModel):
+    """Static building geometry. Fetched once; it does not change during a run."""
+
+    zones: list[ZoneGeometryOut]
+    bounds: list[float]
+    width_m: float
+    depth_m: float
+    floor_area_m2: float
+    carbon_basis: str
+
+    @classmethod
+    def from_domain(cls, geometry: BuildingGeometry) -> "GeometryOut":
+        return cls(
+            zones=[
+                ZoneGeometryOut(
+                    name=zone.name,
+                    footprint=[[x, y] for x, y in zone.footprint],
+                    area_m2=zone.area_m2,
+                    centroid=list(zone.centroid),
+                    is_core=zone.is_core,
+                    orientation=zone.orientation,
+                    azimuth_deg=zone.azimuth_deg,
+                )
+                for zone in geometry.zones
+            ],
+            bounds=list(geometry.bounds),
+            width_m=geometry.width_m,
+            depth_m=geometry.depth_m,
+            floor_area_m2=geometry.floor_area_m2,
+            carbon_basis=GRID_CARBON_BASIS,
         )

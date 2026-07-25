@@ -17,14 +17,21 @@ from pathlib import Path
 
 
 def parse_objects(idf_text: str) -> list[tuple[str, list[str]]]:
-    """Return (object_type, fields) for every object in the file."""
+    """Return (object_type, fields) for every object in the file.
+
+    Empty fields are preserved. IDF objects routinely leave optional fields
+    blank -- BuildingSurface:Detailed has a blank Space Name and a blank Outside
+    Boundary Condition Object -- and dropping them silently shifts every later
+    field one position left. Callers that index by position would then read the
+    wrong value with no error, which matters most for geometry, where the field
+    offsets are the only way to find the vertices.
+    """
     without_comments = "\n".join(line.split("!", 1)[0] for line in idf_text.splitlines())
 
     objects: list[tuple[str, list[str]]] = []
     for statement in without_comments.split(";"):
         fields = [field.strip() for field in statement.split(",")]
-        fields = [field for field in fields if field]
-        if fields:
+        if any(fields):
             objects.append((fields[0], fields[1:]))
     return objects
 

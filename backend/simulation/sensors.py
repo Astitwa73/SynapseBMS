@@ -99,6 +99,17 @@ class SensorReader:
     def is_resolved(self) -> bool:
         return self._resolved
 
+    @property
+    def health(self) -> tuple[int, int, int, int]:
+        """(variables resolved, requested, meters resolved, requested).
+
+        Surfaced so the dashboard can show that every sensor the model was asked
+        for is actually reporting, rather than asserting it in a slide.
+        """
+        variables = sum(1 for h in self._variable_handles.values() if h != INVALID_HANDLE)
+        meters = sum(1 for h in self._meter_handles.values() if h != INVALID_HANDLE)
+        return (variables, len(self._variable_handles), meters, len(self._meter_handles))
+
     def request_variables(self, state) -> None:
         """Tell EnergyPlus to produce our variables. Must precede run_energyplus."""
         for variable, key in self._catalog.variable_requests():

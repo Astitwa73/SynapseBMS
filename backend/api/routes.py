@@ -10,6 +10,7 @@ from backend.api.schemas import (
     CommandOut,
     ConfigOut,
     DecisionOut,
+    GeometryOut,
     MetricsOut,
     ReportOut,
     SetpointIn,
@@ -73,6 +74,38 @@ def read_decisions(
     service: BuildingService = Depends(get_service),
 ) -> list[DecisionOut]:
     return [DecisionOut.from_domain(record) for record in service.decisions(limit=limit)]
+
+
+@router.get("/geometry", response_model=GeometryOut)
+def read_geometry(service: BuildingService = Depends(get_service)) -> GeometryOut:
+    """The building's real plan geometry. Static, so a client fetches it once."""
+    geometry = service.geometry
+    if geometry is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Geometry is available once the building has started",
+        )
+    return GeometryOut.from_domain(geometry)
+
+
+@router.post("/simulation/pause", response_model=StatusOut)
+def pause_simulation(service: BuildingService = Depends(get_service)) -> StatusOut:
+    """Hold the simulation where it is, for narrating a moment during a demo."""
+    service.pause()
+    return StatusOut.from_domain(service.status())
+
+
+@router.post("/simulation/resume", response_model=StatusOut)
+def resume_simulation(service: BuildingService = Depends(get_service)) -> StatusOut:
+    service.resume()
+    return StatusOut.from_domain(service.status())
+
+
+@router.post("/simulation/step", response_model=StatusOut)
+def step_simulation(service: BuildingService = Depends(get_service)) -> StatusOut:
+    """Advance exactly one agent decision, then pause again."""
+    service.step_one_decision()
+    return StatusOut.from_domain(service.status())
 
 
 @router.get("/report", response_model=ReportOut)

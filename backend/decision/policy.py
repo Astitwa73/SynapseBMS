@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from typing import Protocol, runtime_checkable
 
 from backend.control.commands import ControlAction, ControlCommand, SafetyLimits
+from backend.decision.explain import ExpectedImpact
 from backend.processing.comfort import ComfortBand
 from backend.processing.context import BuildingContext, ZoneContext
 
@@ -34,6 +35,11 @@ class Decision:
     command: ControlCommand
     reasoning: str
     observations: tuple[str, ...] = field(default_factory=tuple)
+
+    # Attached by the decision loop rather than by a policy, so that the rule
+    # engine and the language model are explained identically and cannot drift.
+    impact: "ExpectedImpact | None" = None
+    objective: str | None = None
 
     @property
     def action(self) -> ControlAction:

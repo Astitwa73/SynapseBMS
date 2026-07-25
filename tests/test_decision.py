@@ -298,3 +298,50 @@ def test_no_decision_ever_commands_the_setpoint_it_already_has():
             target = decision.command.cooling_setpoint_c
             if target is not None and decision.action != ControlAction.HOLD:
                 assert abs(target - setpoint) > 1e-6, (temperature, setpoint)
+
+
+# --- playback control ------------------------------------------------------
+
+
+def test_throttling_survives_a_timestep_where_nothing_was_paused():
+    """A deadline reset on every timestep silently disables pacing entirely."""
+    import time as _time
+
+    from backend.config.settings import SimulationSettings
+    from backend.simulation.engine import SimulationEngine
+    from backend.simulation.sensors import SensorCatalog
+
+    engine = SimulationEngine(
+        settings=SimulationSettings(seconds_per_timestep=0.05),
+        catalog=SensorCatalog(zone_names=("Z",)),
+        store=SimulationStateStore(),
+    )
+    engine._next_deadline = _time.perf_counter()
+
+    started = _time.perf_counter()
+    for _ in range(4):
+        engine._throttle()
+    elapsed = _time.perf_counter() - started
+
+    assert elapsed >= 0.12, f"four 0.05s timesteps must take real time, took {elapsed:.3f}s"
+
+
+def test_stepping_releases_exactly_the_requested_timesteps():
+    from backend.config.settings import SimulationSettings
+    from backend.simulation.engine import SimulationEngine
+    from backend.simulation.sensors import SensorCatalog
+
+    engine = SimulationEngine(
+        settings=SimulationSettings(seconds_per_timestep=0.0),
+        catalog=SensorCatalog(zone_names=("Z",)),
+        store=SimulationStateStore(),
+    )
+    engine.step(2)
+    assert engine.is_paused
+
+    engine._wait_while_paused()
+    engine._wait_while_paused()
+    assert engine._step_budget == 0, "both steps consumed"
+
+    engine.resume()
+    assert not engine.is_paused
