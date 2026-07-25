@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# EnergyPlus run artifacts
+eplusout.*
+eplustbl.*
+sqlite.err
+run_output/
+
+node_modules/
+frontend/dist/
+.env

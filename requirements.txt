@@ -1,0 +1,8 @@
+# pyenergyplus is deliberately absent: it ships inside the EnergyPlus
+# installation, not on PyPI. See backend/config/paths.py.
+
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pyyaml==6.0.2
+httpx==0.28.1
