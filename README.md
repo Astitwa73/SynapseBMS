@@ -237,6 +237,70 @@ Suggested demo settings, giving one decision roughly every six seconds:
 python scripts/run_autonomous.py --policy llm --speed 0.4 --decide-every 12
 ```
 
+## Run the backend
+
+```bash
+python scripts/run_server.py --policy llm --speed 0.4 --decide-every 12
+```
+
+Starts the simulation, the agent and the API in one process, with one lifecycle.
+Interactive docs at `/docs`.
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /api/status` | Simulation and agent health, policy, LLM latency |
+| `GET /api/metrics` | Current zone comfort, air quality, power breakdown |
+| `GET /api/history?since=` | Time series; `since` returns only what a client missed |
+| `GET /api/decisions` | Agent decisions with reasoning and safety adjustments |
+| `GET /api/config` | Configuration and the full safety envelope |
+| `POST /api/control/setpoint` | Manual override |
+| `POST /api/control/release` | Return the building to its own schedule |
+| `WS /ws` | Live stream |
+
+### The safety envelope applies to operators too
+
+Manual overrides go through the same `ControlStore` as the agent, and the
+response reports what was actually applied:
+
+```bash
+curl -X POST localhost:8000/api/control/setpoint -H "Content-Type: application/json" -d '{"cooling_setpoint_c": 5.0}'
+```
+
+```json
+{
+  "cooling_setpoint_c": 27.0,
+  "heating_setpoint_c": 20.0,
+  "safety_adjustments": [
+    "cooling setpoint 5.0 -> 22.0 (below minimum)",
+    "cooling setpoint 22.0 -> 27.0 (max 1.0C change per step)"
+  ]
+}
+```
+
+A second write path would be a second place for the safety envelope to be
+forgotten, so there isn't one.
+
+### Live stream
+
+The WebSocket is cursor-based rather than fire-and-forget. On connect the client
+receives recent history so charts render populated immediately; thereafter it
+receives only what is new. The server keeps no per-connection state — a client
+reports the last sequence number it holds and gets exactly what it missed, so
+reconnecting produces no gaps and no duplicates.
+
+### Layering
+
+```
+FastAPI routes  ─┐
+                 ├─→  BuildingService  ─→  stores, engine, decision loop
+MCP tools       ─┘        (no HTTP, no protocol knowledge)
+```
+
+`BuildingService` never imports FastAPI. Replacing EnergyPlus with BACnet or
+Modbus means writing one adapter that fills the same state store and one that
+applies commands to real actuators; comfort processing, the decision policy, the
+safety envelope and the dashboard are unchanged.
+
 ## Does the agent actually help?
 
 ```bash

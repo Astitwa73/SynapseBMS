@@ -37,6 +37,24 @@ SECONDS_PER_TIMESTEP_DEFAULT = 900.0
 
 
 @dataclass(frozen=True, slots=True)
+class PowerBreakdown:
+    """Average power over the timestep, in kW.
+
+    EnergyPlus meters report joules accumulated over a timestep, which is the
+    right unit for totalling a day and the wrong one for a live gauge. Dividing
+    by timestep length gives the instantaneous figure a dashboard should show.
+    """
+
+    cooling_kw: float | None = None
+    heating_kw: float | None = None
+    fans_kw: float | None = None
+    pumps_kw: float | None = None
+    lighting_kw: float | None = None
+    equipment_kw: float | None = None
+    total_kw: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class ZoneContext:
     """One zone, with comfort and air quality resolved."""
 
@@ -69,7 +87,11 @@ class BuildingContext:
     site: SiteReading
     energy: EnergyReading
     sequence: int
-    total_power_kw: float | None
+    power: PowerBreakdown
+
+    @property
+    def total_power_kw(self) -> float | None:
+        return self.power.total_kw
 
     @property
     def total_occupancy(self) -> float:
@@ -122,20 +144,30 @@ def build_context(
         for zone in snapshot.zones
     )
 
-    total_j = snapshot.energy.total_electricity_j
-    power_kw = (
-        (total_j / seconds_per_timestep) / 1000.0
-        if total_j is not None and seconds_per_timestep > 0
-        else None
-    )
-
     return BuildingContext(
         clock=snapshot.clock,
         zones=zones,
         site=snapshot.site,
         energy=snapshot.energy,
         sequence=snapshot.sequence,
-        total_power_kw=power_kw,
+        power=_build_power(snapshot.energy, seconds_per_timestep),
+    )
+
+
+def _build_power(energy, seconds_per_timestep: float) -> PowerBreakdown:
+    def kilowatts(joules: float | None) -> float | None:
+        if joules is None or seconds_per_timestep <= 0:
+            return None
+        return joules / seconds_per_timestep / 1000.0
+
+    return PowerBreakdown(
+        cooling_kw=kilowatts(energy.cooling_electricity_j),
+        heating_kw=kilowatts(energy.heating_electricity_j),
+        fans_kw=kilowatts(energy.fans_electricity_j),
+        pumps_kw=kilowatts(energy.pumps_electricity_j),
+        lighting_kw=kilowatts(energy.interior_lights_electricity_j),
+        equipment_kw=kilowatts(energy.interior_equipment_electricity_j),
+        total_kw=kilowatts(energy.total_electricity_j),
     )
 
 
