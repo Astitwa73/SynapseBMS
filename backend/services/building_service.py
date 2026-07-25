@@ -28,6 +28,7 @@ from backend.control.store import ControlStore
 from backend.decision.loop import DecisionLoop, DecisionRecord
 from backend.decision.policy import DecisionPolicy, PolicyTuning, RuleBasedPolicy
 from backend.processing.context import BuildingContext, build_context
+from backend.reports.summary import BuildingReport, build_report
 from backend.simulation.engine import SimulationEngine
 from backend.simulation.idf import controllable_zone_names, lights_by_zone
 from backend.simulation.sensors import SensorCatalog
@@ -212,6 +213,19 @@ class BuildingService:
 
     def _to_context(self, snapshot: SensorSnapshot) -> BuildingContext:
         return build_context(snapshot)
+
+    def report(self, limit: int = 2000) -> BuildingReport:
+        """Summarise the run so far. Raises if nothing has been recorded yet."""
+        contexts = self.history(limit=limit)
+        if not contexts:
+            raise ValueError("No data recorded yet; the simulation is still warming up")
+
+        return build_report(
+            contexts=contexts,
+            decisions=self.decisions(limit=limit),
+            policy_name=self._policy.name,
+            fallbacks=self._loop.failure_count if self._loop else 0,
+        )
 
     # --- writing -----------------------------------------------------------
 

@@ -1,0 +1,14 @@
+{
+  "_comment": "Copy into %APPDATA%\\Claude\\claude_desktop_config.json (Windows) or ~/Library/Application Support/Claude/claude_desktop_config.json (macOS). Adjust the absolute paths. The building API must be running: python scripts/run_server.py",
+  "mcpServers": {
+    "building-management": {
+      "command": "D:\\honeywell_hack\\.venv\\Scripts\\python.exe",
+      "args": [
+        "D:\\honeywell_hack\\scripts\\run_mcp_server.py"
+      ],
+      "env": {
+        "BMS_API_URL": "http://127.0.0.1:8000"
+      }
+    }
+  }
+}

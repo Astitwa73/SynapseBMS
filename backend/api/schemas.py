@@ -19,6 +19,7 @@ from backend.control.commands import ClampResult, SafetyLimits
 from backend.decision.loop import DecisionRecord
 from backend.decision.policy import PolicyTuning
 from backend.processing.context import BuildingContext, ZoneContext
+from backend.reports.summary import BuildingReport, render_markdown
 from backend.services.building_service import ServiceConfig, ServiceStatus
 
 
@@ -234,4 +235,33 @@ class CommandOut(BaseModel):
             heating_setpoint_c=command.heating_setpoint_c,
             lighting_fraction=command.lighting_fraction,
             safety_adjustments=list(result.adjustments),
+        )
+
+
+class ReportOut(BaseModel):
+    """A period report, in both structured and readable form.
+
+    The markdown is included so a client that wants to show or forward the report
+    does not have to reimplement its formatting, and so every consumer quotes the
+    same wording -- including the caveat attached to the savings estimate.
+    """
+
+    headline: str
+    period: dict
+    energy: dict
+    comfort: dict
+    agent: dict
+    savings: dict
+    markdown: str
+
+    @classmethod
+    def from_domain(cls, report: BuildingReport) -> "ReportOut":
+        return cls(
+            headline=report.headline,
+            period=asdict(report.period),
+            energy=asdict(report.energy),
+            comfort=asdict(report.comfort),
+            agent=asdict(report.agent),
+            savings=asdict(report.savings),
+            markdown=render_markdown(report),
         )

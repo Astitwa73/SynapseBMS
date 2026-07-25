@@ -288,6 +288,57 @@ receives only what is new. The server keeps no per-connection state — a client
 reports the last sequence number it holds and gets exactly what it missed, so
 reconnecting produces no gaps and no duplicates.
 
+## MCP server
+
+```bash
+python scripts/run_server.py        # terminal 1: the building
+python scripts/run_mcp_server.py    # terminal 2: the MCP adapter
+```
+
+Six tools over stdio: `get_building_metrics`, `get_agent_decisions`,
+`set_cooling_setpoint`, `get_configuration`, `generate_report`,
+`release_control`.
+
+Register it with a desktop MCP client using
+[docs/claude_desktop_config.json](docs/claude_desktop_config.json) (adjust the
+absolute paths) and an assistant can read the building and adjust it directly.
+
+Every tool calls the same HTTP endpoints the dashboard uses. An MCP client has
+exactly the authority an operator has and no more — a setpoint request goes
+through the same `ControlStore` and is clamped identically:
+
+```
+set_cooling_setpoint(4.0)
+  -> applied 26.0
+     SAFETY: cooling setpoint 4.0 -> 22.0 (below minimum)
+     SAFETY: cooling setpoint 22.0 -> 26.0 (max 1.0C change per step)
+```
+
+Commands are tagged `mcp:<reason>` so their origin appears in the audit trail.
+
+### Dependency note
+
+The MCP SDK requires a newer `starlette` than FastAPI 0.115 accepts, and the
+mismatch breaks every route with `Router.__init__() got an unexpected keyword
+argument 'on_startup'`. `requirements.txt` pins `fastapi`, `starlette` and `mcp`
+as a verified set — upgrade them together, not individually.
+
+## Reports
+
+```bash
+curl localhost:8000/api/report
+```
+
+Energy by end use, comfort and air-quality statistics, agent activity, and a
+savings estimate. Available as structured JSON and as markdown.
+
+The savings figure is explicitly an estimate and carries its basis in the
+payload: it is derived from the setpoint offset against the unmanaged baseline
+at a sensitivity measured by `compare_policies.py`, and capped, because linear
+extrapolation beyond the measured range is not supportable. There is no live
+counterfactual — you cannot know what the building would have used without the
+agent while the agent is running — so the report does not invent one.
+
 ### Layering
 
 ```

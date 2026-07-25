@@ -11,6 +11,7 @@ from backend.api.schemas import (
     ConfigOut,
     DecisionOut,
     MetricsOut,
+    ReportOut,
     SetpointIn,
     StatusOut,
 )
@@ -72,6 +73,19 @@ def read_decisions(
     service: BuildingService = Depends(get_service),
 ) -> list[DecisionOut]:
     return [DecisionOut.from_domain(record) for record in service.decisions(limit=limit)]
+
+
+@router.get("/report", response_model=ReportOut)
+def read_report(
+    limit: int = Query(default=2000, ge=1, le=5000, description="samples to summarise"),
+    service: BuildingService = Depends(get_service),
+) -> ReportOut:
+    try:
+        return ReportOut.from_domain(service.report(limit=limit))
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        ) from exc
 
 
 @router.get("/config", response_model=ConfigOut)

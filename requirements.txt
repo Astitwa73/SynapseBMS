@@ -1,8 +1,15 @@
 # pyenergyplus is deliberately absent: it ships inside the EnergyPlus
 # installation, not on PyPI. See backend/config/paths.py.
 
-fastapi==0.115.6
+# The MCP SDK requires a newer starlette than FastAPI 0.115 accepts, which
+# silently breaks every route with "Router.__init__() got an unexpected keyword
+# argument 'on_startup'". These versions are pinned together because they were
+# verified together; upgrade them as a set, not individually.
+fastapi==0.140.0
+starlette==1.3.1
 uvicorn[standard]==0.34.0
-pydantic==2.10.4
+pydantic==2.13.4
+mcp==1.28.1
+
 pyyaml==6.0.2
 httpx==0.28.1
