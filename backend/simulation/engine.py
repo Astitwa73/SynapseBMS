@@ -22,14 +22,14 @@ import threading
 import time
 from dataclasses import dataclass
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 
 from backend.config.paths import default_weather_file, ensure_pyenergyplus_importable
 from backend.config.settings import SimulationSettings
 from backend.control.actuators import ActuatorRegistry
 from backend.control.store import ControlStore
 from backend.simulation.sensors import SensorCatalog, SensorReader
-from backend.simulation.state import SimulationStateStore
+from backend.simulation.state import SensorSnapshot, SimulationStateStore
 
 logger = logging.getLogger(__name__)
 
@@ -56,12 +56,14 @@ class SimulationEngine:
         store: SimulationStateStore,
         control: ControlStore | None = None,
         lights_by_zone: Mapping[str, str] | None = None,
+        on_timestep: Callable[[SensorSnapshot], None] | None = None,
     ) -> None:
         self._settings = settings
         self._catalog = catalog
         self._store = store
         self._control = control
         self._lights_by_zone = lights_by_zone or {}
+        self._on_timestep = on_timestep
         self._actuators: ActuatorRegistry | None = None
 
         self._thread: threading.Thread | None = None
@@ -216,7 +218,15 @@ class SimulationEngine:
         if not self._should_report(snapshot.clock.calendar_day):
             return
 
-        self._store.publish(snapshot)
+        stamped = self._store.publish(snapshot)
+
+        # Runs inside the EnergyPlus callback, so it blocks the simulation until
+        # it returns. That is wrong for a live demo, where the agent must not be
+        # able to stall the building, and exactly right for a benchmark, where
+        # every policy must get the same number of decisions however slow it is.
+        if self._on_timestep is not None:
+            self._on_timestep(stamped)
+
         self._throttle()
 
     def _should_report(self, calendar_day: tuple[int, int]) -> bool:

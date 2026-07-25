@@ -237,6 +237,49 @@ Suggested demo settings, giving one decision roughly every six seconds:
 python scripts/run_autonomous.py --policy llm --speed 0.4 --decide-every 12
 ```
 
+## Does the agent actually help?
+
+```bash
+python scripts/compare_policies.py
+```
+
+Runs the same day three ways on identical conditions. Decisions are made
+synchronously inside the simulation callback, so every policy gets the same
+number of decisions at the same points in the day however long it takes to
+think — pacing on wall-clock time would hand the fast policy more decisions and
+measure laptop speed as much as judgment.
+
+Results for 2 July, deciding hourly:
+
+| | no agent | rule engine | llama3 |
+| --- | ---: | ---: | ---: |
+| Cooling energy | 32.93 kWh | 21.02 | **20.72** |
+| Lighting energy | 82.88 kWh | 73.57 | 73.57 |
+| Total electricity | 167.85 kWh | 145.35 | **145.05** |
+| Occupied setpoint | 23.90 °C | 27.27 | 28.00 |
+| Mean occupied PMV | −0.553 | **+0.016** | +0.043 |
+| Time uncomfortable | 86.8% | **14.5%** | 20.0% |
+| Model fallbacks | — | 0 | 0 |
+
+Both agents cut cooling energy by roughly 37% **and** improve comfort, because
+the unmanaged building is over-cooled: at 23.9 °C in summer clothing occupants
+sit at PMV −0.55, uncomfortable for 87% of occupied time. Energy and comfort are
+not in tension here — the baseline was simply wrong in both directions.
+
+Between the two agents the result is close and honest: the language model wins
+narrowly on energy by pushing to the 28 °C ceiling, and the rule engine wins on
+comfort by settling slightly lower. The LLM's advantage is that it explains every
+decision in plain English; the rule engine's is that it never needs a fallback.
+
+### Lighting follows occupancy, not the model
+
+An earlier action set let the agent choose between relaxing the setpoint and
+dimming the lights when the building was empty. The model always took the
+setpoint and never dimmed, costing 9.3 kWh of lighting in one day against the
+rule engine. Both are unconditionally correct in an empty building, so making
+them alternatives was a design error: dimming an unoccupied space is policy, not
+judgment, and now runs in deterministic code.
+
 ## Tests
 
 ```bash

@@ -85,9 +85,11 @@ def test_occupied_actions_restore_full_lighting():
     assert command.lighting_fraction == 1.0
 
 
-def test_empty_building_actions_leave_lighting_alone():
-    command = command_for(ControlAction.RAISE_SETPOINT, context(occupants=0), 1.0, LIMITS, "t")
-    assert command.lighting_fraction is None
+def test_empty_building_dims_whatever_action_was_chosen():
+    """Lighting follows occupancy: an empty building is dimmed either way."""
+    for action in (ControlAction.RAISE_SETPOINT, ControlAction.HOLD):
+        command = command_for(action, context(occupants=0), 1.0, LIMITS, "t")
+        assert command.lighting_fraction == 0.3, action
 
 
 def test_reduce_lighting_dims():

@@ -61,14 +61,22 @@ def _lighting_for(
     context: BuildingContext,
     setback_fraction: float,
     occupied_fraction: float,
-) -> float | None:
-    """Dim on request; restore whenever anyone is present; otherwise leave it be.
+) -> float:
+    """Lighting follows occupancy, not the chosen action.
 
-    Control state is sticky, so an occupied decision has to restate full output
-    or an earlier setback dim would persist through the working day.
+    Dimming an empty building is not a judgment call -- nobody is there. Making
+    it one of the actions forced a choice between two things that are both
+    unconditionally correct when the building is empty, and a policy that
+    preferred the setpoint never dimmed at all. Measured against the rule engine
+    that cost 9.3 kWh of lighting in a single day.
+
+    So occupancy decides, and the model's action only governs the setpoint. An
+    explicit dim request is still honoured, which is the one case where the
+    caller knows something occupancy does not.
+
+    Control state is sticky, so this always returns a value: an occupied decision
+    has to restate full output or an earlier setback would persist all day.
     """
     if action is ControlAction.REDUCE_LIGHTING:
         return setback_fraction
-    if context.is_occupied:
-        return occupied_fraction
-    return None
+    return occupied_fraction if context.is_occupied else setback_fraction
