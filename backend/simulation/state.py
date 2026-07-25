@@ -22,7 +22,12 @@ DEFAULT_HISTORY_LIMIT = 2880  # 30 days at 15-minute timesteps
 
 @dataclass(frozen=True, slots=True)
 class SimulationClock:
-    """Where the simulation believes it is in time."""
+    """Where the simulation believes it is in time.
+
+    Timestamps mark the START of the timestep interval, the usual convention for
+    interval telemetry. It also sidesteps the awkward end-of-interval cases where
+    a quarter-hourly sample lands on minute 60 or hour 24.
+    """
 
     month: int
     day: int
@@ -33,6 +38,10 @@ class SimulationClock:
     @property
     def label(self) -> str:
         return f"{self.month:02d}-{self.day:02d} {self.hour:02d}:{self.minute:02d}"
+
+    @property
+    def calendar_day(self) -> tuple[int, int]:
+        return (self.month, self.day)
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,6 +57,14 @@ class ZoneReading:
     air_temperature_c: float | None = None
     relative_humidity_pct: float | None = None
     occupant_count: float | None = None
+    cooling_setpoint_c: float | None = None
+    heating_setpoint_c: float | None = None
+    lighting_power_w: float | None = None
+    ventilation_mass_flow_kg_s: float | None = None
+
+    @property
+    def is_occupied(self) -> bool:
+        return bool(self.occupant_count)
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,15 +73,38 @@ class SiteReading:
 
     outdoor_air_temperature_c: float | None = None
     outdoor_relative_humidity_pct: float | None = None
+    direct_solar_w_per_m2: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class EnergyReading:
-    """Meter totals for the timestep, in joules as EnergyPlus reports them."""
+    """Meter totals for the timestep, in joules as EnergyPlus reports them.
 
-    facility_electricity_j: float | None = None
+    Broken down by end use rather than collected into one figure: knowing that
+    cooling dominates is what makes a control decision explainable, and it lets
+    the dashboard show the effect of a lighting action on the lighting meter.
+    """
+
+    building_electricity_j: float | None = None
+    hvac_electricity_j: float | None = None
     cooling_electricity_j: float | None = None
-    lighting_electricity_j: float | None = None
+    heating_electricity_j: float | None = None
+    fans_electricity_j: float | None = None
+    interior_lights_electricity_j: float | None = None
+    interior_equipment_electricity_j: float | None = None
+
+    @property
+    def total_electricity_j(self) -> float | None:
+        """Whole-building electricity.
+
+        Derived rather than read from Electricity:Facility, which this model does
+        not expose. Building covers lights and plug loads, HVAC covers cooling,
+        heating and fans; with no exterior loads in the model the two are
+        exhaustive and disjoint.
+        """
+        parts = [self.building_electricity_j, self.hvac_electricity_j]
+        present = [value for value in parts if value is not None]
+        return sum(present) if present else None
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,6 +165,16 @@ class SimulationStateStore:
         with self._lock:
             snapshots = tuple(self._history)
         return snapshots[-limit:] if limit is not None else snapshots
+
+    def history_since(self, sequence: int) -> tuple[SensorSnapshot, ...]:
+        """Return snapshots published after `sequence`, oldest-first.
+
+        Polling `latest` drops intermediate timesteps whenever a consumer is
+        slower than the simulation -- fine for control, wrong for charts and
+        logs. Sequence numbers let a consumer catch up on exactly what it missed.
+        """
+        with self._lock:
+            return tuple(s for s in self._history if s.sequence > sequence)
 
     def wait_for_first(self, timeout: float | None = None) -> bool:
         """Block until at least one snapshot exists. Used by API readiness checks."""

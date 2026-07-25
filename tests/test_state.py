@@ -20,7 +20,7 @@ def make_snapshot(temperature: float = 22.0, zones: int = 2) -> SensorSnapshot:
             for i in range(zones)
         ),
         site=SiteReading(outdoor_air_temperature_c=31.5),
-        energy=EnergyReading(facility_electricity_j=1_000_000.0),
+        energy=EnergyReading(building_electricity_j=1_000_000.0, hvac_electricity_j=500_000.0),
     )
 
 
@@ -134,3 +134,28 @@ def test_history_snapshot_is_not_affected_by_later_publishes():
 def test_rejects_nonsense_history_limit():
     with pytest.raises(ValueError):
         SimulationStateStore(history_limit=0)
+
+
+def test_history_since_returns_only_newer_snapshots():
+    store = SimulationStateStore()
+    for _ in range(5):
+        store.publish(make_snapshot())
+
+    assert [s.sequence for s in store.history_since(0)] == [1, 2, 3, 4, 5]
+    assert [s.sequence for s in store.history_since(3)] == [4, 5]
+    assert store.history_since(5) == ()
+
+
+def test_history_since_lets_a_slow_consumer_catch_up():
+    """Polling latest() drops timesteps; draining by sequence must not."""
+    store = SimulationStateStore()
+    seen: list[int] = []
+    last = 0
+    for batch in range(3):
+        for _ in range(4):
+            store.publish(make_snapshot())
+        for snapshot in store.history_since(last):
+            last = snapshot.sequence
+            seen.append(snapshot.sequence)
+
+    assert seen == list(range(1, 13)), "no timestep may be skipped"

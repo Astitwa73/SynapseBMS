@@ -60,6 +60,39 @@ that closed-loop control is possible at all. `inspect_model.py` writes
 `docs/available_sensors.json`, which is the contract the sensor layer is built
 against.
 
+## Run the simulation
+
+```bash
+python scripts/run_simulation.py --speed 0.12 --seconds 45
+```
+
+Live sensor data should stream with contiguous sequence numbers, occupancy
+rising to 52 at 08:00 and whole-building power following it.
+
+### Why an annual run period, not design days
+
+Design days are *sizing* scenarios: their schedules deliberately zero out
+occupancy so equipment is sized for the worst case. That produces an empty
+building with flat energy use — nothing for an agent to reason about. The annual
+run period carries real weather and real occupancy schedules instead.
+
+An unthrottled annual run reaches December in about 11 seconds, so the engine
+fast-forwards at full speed to a chosen date (`--from-date`) and only then drops
+to demo pace.
+
+### Derived metrics
+
+Two dashboard metrics are computed rather than read, because this model does not
+produce them:
+
+| Metric | Source |
+| --- | --- |
+| CO₂ / air quality | Steady-state mass balance from occupant count and mechanical ventilation mass flow |
+| PMV comfort | Fanger model from zone temperature and relative humidity |
+
+Whole-building electricity is likewise derived as `Electricity:Building +
+Electricity:HVAC`; this model exposes no `Electricity:Facility` meter.
+
 ## Tests
 
 ```bash
