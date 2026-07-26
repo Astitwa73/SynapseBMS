@@ -1,8 +1,36 @@
-# Autonomous Building Management System
+# SynapseBMS — Autonomous Building Management System
 
 An AI agent that reads live sensor data from an EnergyPlus building simulation,
 reasons about building state, and writes control decisions back into the running
 simulation — closing the loop the way a supervisory BMS layer does.
+
+Measured on identical conditions, the agent cuts cooling energy by **37%** while
+reducing time-uncomfortable from **87% to 20%**. Neither number is estimated;
+both come from [`scripts/compare_policies.py`](scripts/compare_policies.py),
+which runs the same simulated day with and without the agent.
+
+![The dashboard during a live run](docs/screenshots/dashboard-full.png)
+
+## Quickstart
+
+Requires [EnergyPlus](#prerequisites) and [Ollama](https://ollama.com) with
+`llama3`.
+
+```bash
+python -m venv .venv && .venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt -r requirements-dev.txt
+```
+
+```bash
+cd frontend && npm install && npm run build && cd ..
+```
+
+```bash
+python scripts/run_server.py --policy llm --speed 0.4 --decide-every 12
+```
+
+Open <http://localhost:8000>. One process serves the simulation, the agent, the
+API and the dashboard.
 
 ## Architecture
 
@@ -124,7 +152,7 @@ defeated by any bug downstream of it.
 | --- | --- |
 | Cooling 22–28 °C, heating 16–20 °C | Comfort envelope |
 | Heating ≤ cooling − 2 °C | **EnergyPlus terminates** on an inverted deadband, so a bad setpoint would end the demo |
-| Max 0.5 °C change per timestep | Prevents HVAC surges and damps agent oscillation |
+| Max 1.0 °C change per timestep | Prevents HVAC surges and damps agent oscillation |
 | Lighting ≥ 30% | Egress safety |
 | No command → actuators released | Fail-safe: the building runs its own schedule |
 
@@ -288,6 +316,73 @@ receives only what is new. The server keeps no per-connection state — a client
 reports the last sequence number it holds and gets exactly what it missed, so
 reconnecting produces no gaps and no duplicates.
 
+## Dashboard
+
+```bash
+cd frontend
+npm install
+npm run build     # emits into backend/api/static/, served on :8000
+npm run dev       # or develop on :5173 against the same backend
+```
+
+The dashboard has no mock data path. If the backend is not running it says so
+rather than showing a plausible building — see [frontend/README.md](frontend/README.md).
+
+Every figure carries where it came from, because a demo that mixes measurement
+with estimate teaches the judge nothing about either:
+
+| Tag | Meaning |
+| --- | --- |
+| **Measured** | Read directly out of EnergyPlus this timestep |
+| **Derived** | Computed from measured values by a stated model (PMV, CO₂, power breakdown) |
+| **Estimated** | Depends on assumptions that cannot be verified from this run (savings, carbon) |
+
+Animations are held to the same rule: they mark changes in *meaning*, not changes
+in value. Nothing on screen animates an event the backend did not produce, and no
+latency, confidence or reasoning is synthesised to fill a gap.
+
+### One decision, end to end
+
+![Decision impact panel](docs/screenshots/decision-impact.png)
+
+Objective, observed conditions, the model's own words, the projected impact and
+the *measured* outcome over the following window — side by side, so the
+projection can be wrong in public. The measured panel names its confound:
+weather and occupancy also moved across the window, so it reports what the
+building did, not what the decision alone caused.
+
+Instead of a self-reported confidence score, the panel shows **policy
+agreement**: the deterministic rule engine runs on the same state every cycle,
+and the dashboard reports whether it independently chose the same action.
+
+### The safety envelope is demonstrable, not asserted
+
+![Safety layer clamping an unsafe request](docs/screenshots/safety-layer-clamped.png)
+
+The two buttons issue a real `POST /api/control/setpoint` against the endpoint
+the agent uses. The value shown as *Applied* is what the backend actually wrote,
+and each clamp names the rule that fired.
+
+### Digital twin, from the real model geometry
+
+![Floor plan](docs/screenshots/digital-twin.png)
+
+The plan is not drawn by hand. Vertices come from
+`BuildingSurface:Detailed` in the IDF, and façade orientation from the outward
+normal of each surface computed with Newell's method — which is why the core zone
+is a rectangle inside four trapezoids and the building measures 30.5 × 15.2 m.
+
+### Validated performance
+
+![Benchmark panel](docs/screenshots/benchmark.png)
+
+The benchmark card renders [`docs/benchmark.json`](docs/benchmark.json), an
+artifact written by `compare_policies.py`. It carries the date it was measured,
+the model, the day and the cadence, so the figure on screen can be reproduced.
+
+Press `?` for the architecture overlay, which lists the system's stated
+limitations alongside its properties.
+
 ## MCP server
 
 ```bash
@@ -401,16 +496,49 @@ judgment, and now runs in deterministic code.
 python -m pytest -q
 ```
 
+201 tests, no EnergyPlus installation required — the simulation boundary is
+faked at the API surface so the suite runs anywhere.
+
 ## Layout
 
 | Path | Responsibility |
 | --- | --- |
-| `backend/config/` | EnergyPlus discovery, runtime settings |
-| `backend/simulation/` | Simulation thread, sensor reads, shared state |
-| `backend/decision/` | Safety clamping of agent commands |
-| `backend/mcp_server/` | MCP tools exposed to the agent |
-| `backend/agent/` | LLM reasoning loop |
-| `backend/api/` | FastAPI app and WebSocket stream |
+| `backend/config/` | EnergyPlus discovery, runtime settings, logging |
+| `backend/simulation/` | Simulation thread, IDF parsing, geometry, sensor reads, shared state |
+| `backend/processing/` | PMV comfort, CO₂ mass balance, carbon, building context |
+| `backend/decision/` | Decision policies, action translation, impact projection, decision loop |
+| `backend/control/` | Safety clamping and actuator writes — the only path to a setpoint |
+| `backend/agent/` | LLM policy, Ollama client, prompt |
+| `backend/services/` | `BuildingService` — the domain API, with no protocol knowledge |
+| `backend/api/` | FastAPI app, REST routes, WebSocket stream |
+| `backend/mcp_server/` | MCP tools over stdio |
 | `backend/reports/` | Report generation |
+| `frontend/` | React dashboard ([README](frontend/README.md)) |
 | `models/` | Building models (`.idf`) under version control |
-| `scripts/` | Environment verification and discovery tooling |
+| `scripts/` | Verification, run and comparison tooling |
+| `scripts/deck/` | Submission-deck build, kept out of the runtime path |
+| `docs/` | Measured artifacts: benchmark, sensor inventory, screenshots |
+| `tests/` | Test suite |
+
+## Submission package
+
+The deck and its screenshots are generated, not assembled by hand — every figure
+in the deck is read from `docs/benchmark.json`.
+
+```bash
+python -m pip install -r requirements-docs.txt
+python -m playwright install chromium
+```
+
+```bash
+python scripts/run_server.py --policy llm --speed 0.4 --decide-every 12
+python scripts/capture_screenshots.py     # -> docs/screenshots/
+python scripts/deck/build_deck.py         # -> docs/Autonomous_BMS_Idea_Submission.pptx
+```
+
+## Licence
+
+[MIT](LICENSE).
+
+`models/5ZoneAirCooled.idf` is an example model distributed with EnergyPlus and
+remains under its own licence (BSD-3-Clause, U.S. Department of Energy / NREL).

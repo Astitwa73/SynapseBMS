@@ -1,32 +1,49 @@
-# React + TypeScript + Vite
+# Dashboard
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+The operator-facing surface of the autonomous BMS. React 19 + TypeScript, Vite,
+Tailwind 4, Recharts, Framer Motion.
 
-Currently, two official plugins are available:
+It renders one thing: the agent's decision loop over a live building. Every
+figure on screen is tagged **Measured**, **Derived** or **Estimated**, and
+nothing is animated that the backend did not actually do.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Develop
 
-## React Compiler
+The backend must be running first — the dashboard has no mock data, by design.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+python ../scripts/run_server.py --policy llm --speed 0.4 --decide-every 12
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+```bash
+npm install
+npm run dev
+```
+
+Vite serves on `:5173` and proxies `/api` and `/ws` to `:8000`, so the API origin
+is identical in development and production and no base URL is configurable
+anywhere in the client. See [vite.config.ts](vite.config.ts).
+
+## Build
+
+```bash
+npm run build
+```
+
+Output goes to `../backend/api/static/`, which FastAPI mounts, so the demo runs
+from one command and one URL: `http://localhost:8000`.
+
+## Layout
+
+| Path | Responsibility |
+| --- | --- |
+| `src/api/` | Hand-written mirror of the backend Pydantic schemas |
+| `src/hooks/` | WebSocket stream, decision-cycle state machine, static fetches |
+| `src/lib/` | Formatting, provenance labels, outcome measurement |
+| `src/components/agent/` | Decision impact, safety layer, audit trail |
+| `src/components/twin/` | Floor plan built from the real IDF geometry |
+| `src/components/metrics/` | Trend chart, validated benchmark |
+| `src/components/pipeline/` | Live system pipeline |
+| `src/components/shell/` | Header, KPIs, health strip, architecture overlay |
+
+Press `?` anywhere in the dashboard for the architecture overlay.
