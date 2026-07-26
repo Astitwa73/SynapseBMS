@@ -12,6 +12,7 @@ import { CycleIndicator } from "../cycle/CycleIndicator";
 import type { DecisionCycle } from "../../hooks/useDecisionCycle";
 import { clockLabel, number } from "../../lib/format";
 import { StatusDot } from "../ui/primitives";
+import { DemoControls } from "./DemoControls";
 
 const CONNECTION_COPY: Record<ConnectionState, { label: string; severity: "ok" | "warn" | "crit" }> =
   {
@@ -40,7 +41,7 @@ export function Header({
   const paused = status?.is_paused ?? false;
 
   return (
-    <header className="flex shrink-0 items-center gap-4 border-b border-line bg-surface px-4 py-2.5">
+    <header className="flex shrink-0 items-center gap-4 border-b border-line bg-surface px-3 py-1.5">
       <div className="flex shrink-0 items-center gap-2.5">
         <span className="h-6 w-1 rounded-sm bg-brand" aria-hidden="true" />
         <div>
@@ -74,6 +75,11 @@ export function Header({
       </div>
 
       <div className="ml-auto flex shrink-0 items-center gap-3">
+        <DemoControls
+          paused={paused}
+          running={status?.simulation_running ?? false}
+        />
+
         <PolicyBadge status={status} />
 
         <span className="flex items-center gap-1.5 rounded border border-line bg-sunken px-2 py-1">

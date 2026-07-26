@@ -196,3 +196,29 @@ export type StreamMessage =
   | { type: "update"; status: Status; metrics: Metrics[]; decisions: Decision[] };
 
 export type ConnectionState = "connecting" | "live" | "reconnecting" | "offline";
+
+export interface BenchmarkResult {
+  label: string;
+  cooling_kwh: number;
+  lighting_kwh: number;
+  fans_kwh: number;
+  total_kwh: number;
+  mean_setpoint_c: number | null;
+  mean_occupied_pmv: number | null;
+  uncomfortable_pct: number;
+  decisions: number;
+  fallbacks: number;
+  clamped: number;
+}
+
+/** A recorded measurement, not a live reading. `measured_at` and `command`
+ * travel with it so the figure is reproducible and never mistaken for now. */
+export interface Benchmark {
+  measured_at: string;
+  command: string;
+  building_model: string;
+  date: string;
+  decide_every: number;
+  llm_model: string | null;
+  results: BenchmarkResult[];
+}

@@ -339,3 +339,39 @@ class GeometryOut(BaseModel):
             floor_area_m2=geometry.floor_area_m2,
             carbon_basis=GRID_CARBON_BASIS,
         )
+
+
+class BenchmarkOut(BaseModel):
+    """A measured policy comparison, as written by scripts/compare_policies.py.
+
+    Served from the artifact rather than recomputed, because the comparison takes
+    minutes of simulation per policy and must be identical every time it is shown.
+    Absent until the script has been run, which the dashboard reports honestly
+    rather than filling with plausible numbers.
+    """
+
+    measured_at: str
+    date: str
+    decide_every: int
+    building_model: str
+    llm_model: str | None
+    command: str
+    results: list[dict]
+
+
+class BenchmarkOut(BaseModel):
+    """A recorded head-to-head measurement, not a live reading.
+
+    Served from the file compare_policies.py writes, because producing it takes
+    three full simulation runs and dozens of real model calls. The timestamp and
+    the command that produced it travel with the numbers so nobody can mistake a
+    recording for something happening now.
+    """
+
+    measured_at: str
+    command: str
+    building_model: str
+    date: str
+    decide_every: int
+    llm_model: str | None
+    results: list[dict]

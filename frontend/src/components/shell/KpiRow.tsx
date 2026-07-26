@@ -128,7 +128,7 @@ function Tile({
   title?: string;
 }) {
   return (
-    <div className="relative bg-surface px-4 py-3" title={title}>
+    <div className="relative bg-surface px-3 py-2" title={title}>
       <Readout label={label} value={value} unit={unit} hint={hint} severity={severity} />
       {spark && spark.length > 3 && (
         <Sparkline values={spark} severity={severity} />
@@ -174,7 +174,7 @@ function Sparkline({ values, severity }: { values: number[]; severity: Severity 
     <svg
       viewBox="0 0 100 100"
       preserveAspectRatio="none"
-      className="mt-1.5 h-5 w-full"
+      className="mt-1 h-4 w-full"
       aria-hidden="true"
     >
       <motion.polyline

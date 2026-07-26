@@ -8,6 +8,11 @@
 
 import type { ReactNode } from "react";
 import { SEVERITY_CLASSES, type Severity } from "../../lib/format";
+import {
+  PROVENANCE_CLASSES,
+  PROVENANCE_LABELS,
+  type Basis,
+} from "../../lib/provenance";
 
 interface CardProps {
   title?: string;
@@ -34,7 +39,7 @@ export function Card({
       } ${className}`}
     >
       {(title || action) && (
-        <header className="flex items-baseline justify-between gap-3 border-b border-line px-4 py-2.5">
+        <header className="flex items-baseline justify-between gap-3 border-b border-line px-3 py-1.5">
           <div className="min-w-0">
             {title && (
               <h2 className="text-[11px] font-semibold uppercase tracking-[0.09em] text-muted">
@@ -46,7 +51,10 @@ export function Card({
           {action}
         </header>
       )}
-      <div className="min-h-0 flex-1 p-4">{children}</div>
+      {/* overflow-hidden is load-bearing: without it a child with an intrinsic
+          size -- an SVG, a wide table -- renders at full size and draws over
+          neighbouring panels when the row is short. */}
+      <div className="min-h-0 flex-1 overflow-hidden p-3">{children}</div>
     </section>
   );
 }
@@ -172,5 +180,20 @@ export function AwaitingData({ label = "Awaiting simulation data" }: { label?: s
       </div>
       <p className="text-xs text-faint">{label}</p>
     </div>
+  );
+}
+
+/** Declares where a number came from. Applied to every figure whose provenance
+ * is not self-evident, so nothing is presented with more authority than it has. */
+export function ProvenanceTag({ basis, compact = false }: { basis: Basis; compact?: boolean }) {
+  return (
+    <span
+      title={basis.detail}
+      className={`inline-flex shrink-0 cursor-help items-center rounded border px-1 py-px text-[9px] font-semibold uppercase tracking-[0.06em] ${PROVENANCE_CLASSES[basis.provenance]}`}
+    >
+      {compact
+        ? PROVENANCE_LABELS[basis.provenance].charAt(0)
+        : PROVENANCE_LABELS[basis.provenance]}
+    </span>
   );
 }

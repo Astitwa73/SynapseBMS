@@ -89,7 +89,7 @@ export function HealthStrip({
   ];
 
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-x-1 gap-y-1 rounded-lg border border-line bg-surface px-3 py-1.5">
+    <div className="flex shrink-0 flex-wrap items-center gap-x-1 gap-y-1 rounded-lg border border-line bg-surface px-3 py-1">
       {items.map((item, index) => (
         <div key={item.label} className="flex items-center">
           <span className="flex items-center gap-1.5 px-1.5" title={item.title}>

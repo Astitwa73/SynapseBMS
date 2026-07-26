@@ -10,6 +10,7 @@ the building is one call from wherever it needs to happen.
 
 from __future__ import annotations
 
+import json
 import logging
 import threading
 from dataclasses import dataclass
@@ -18,6 +19,7 @@ from pathlib import Path
 from backend.agent.llm_policy import LlmPolicy
 from backend.agent.ollama_client import OllamaClient, OllamaError, OllamaSettings
 from backend.config.settings import (
+    DOCS_DIR,
     DEFAULT_MODEL_NAME,
     MODELS_DIR,
     CalendarDay,
@@ -198,6 +200,17 @@ class BuildingService:
         )
         kwh = joules / 3.6e6
         return kwh, carbon_kg(kwh) or 0.0
+
+    def benchmark(self) -> dict | None:
+        """The measured policy comparison, if it has been run."""
+        path = DOCS_DIR / "benchmark.json"
+        if not path.is_file():
+            return None
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            logger.exception("Benchmark artifact is unreadable")
+            return None
 
     def pause(self) -> None:
         if self._engine is not None:

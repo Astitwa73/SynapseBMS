@@ -1,0 +1,49 @@
+{
+  "measured_at": "2026-07-25T19:51:43.476126+00:00",
+  "date": "07-02",
+  "decide_every": 4,
+  "building_model": "5ZoneAirCooled.idf",
+  "llm_model": "llama3",
+  "command": "python scripts/compare_policies.py --date 07-02 --decide-every 4",
+  "results": [
+    {
+      "label": "no agent",
+      "cooling_kwh": 32.9294540387706,
+      "lighting_kwh": 82.875,
+      "fans_kwh": 7.957338775510005,
+      "total_kwh": 167.84623804359015,
+      "mean_setpoint_c": 23.899999999999988,
+      "mean_occupied_pmv": -0.5533781698564916,
+      "uncomfortable_pct": 86.81818181818181,
+      "decisions": 0,
+      "fallbacks": 0,
+      "clamped": 0
+    },
+    {
+      "label": "rule engine",
+      "cooling_kwh": 21.015201669587885,
+      "lighting_kwh": 73.57499999999996,
+      "fans_kwh": 6.466555309356858,
+      "total_kwh": 145.35172993571018,
+      "mean_setpoint_c": 27.272727272727273,
+      "mean_occupied_pmv": 0.016185967352368606,
+      "uncomfortable_pct": 14.545454545454545,
+      "decisions": 24,
+      "fallbacks": 0,
+      "clamped": 0
+    },
+    {
+      "label": "llama3",
+      "cooling_kwh": 20.71903166176282,
+      "lighting_kwh": 73.57499999999996,
+      "fans_kwh": 6.44761150120116,
+      "total_kwh": 145.0530166401196,
+      "mean_setpoint_c": 28.0,
+      "mean_occupied_pmv": 0.042949304999375985,
+      "uncomfortable_pct": 20.0,
+      "decisions": 24,
+      "fallbacks": 0,
+      "clamped": 0
+    }
+  ]
+}

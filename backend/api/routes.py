@@ -7,6 +7,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
 from backend.api.schemas import (
+    BenchmarkOut,
     CommandOut,
     ConfigOut,
     DecisionOut,
@@ -74,6 +75,18 @@ def read_decisions(
     service: BuildingService = Depends(get_service),
 ) -> list[DecisionOut]:
     return [DecisionOut.from_domain(record) for record in service.decisions(limit=limit)]
+
+
+@router.get("/benchmark", response_model=BenchmarkOut)
+def read_benchmark(service: BuildingService = Depends(get_service)) -> BenchmarkOut:
+    """The measured policy comparison. 404 until the benchmark has been run."""
+    payload = service.benchmark()
+    if payload is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No benchmark recorded. Run: python scripts/compare_policies.py",
+        )
+    return BenchmarkOut(**payload)
 
 
 @router.get("/geometry", response_model=GeometryOut)

@@ -18,8 +18,10 @@ speed as much as judgment.
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import sys
+from datetime import datetime, timezone
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -29,6 +31,7 @@ from backend.agent.llm_policy import LlmPolicy  # noqa: E402
 from backend.agent.ollama_client import OllamaClient, OllamaError, OllamaSettings  # noqa: E402
 from backend.config.logging import configure_logging  # noqa: E402
 from backend.config.settings import (  # noqa: E402
+    DOCS_DIR,
     DEFAULT_MODEL_NAME,
     MODELS_DIR,
     CalendarDay,
@@ -218,6 +221,49 @@ def print_table(results: list[Result]) -> None:
         print(f"{name:<22}{cells}")
 
 
+def save_benchmark(results: list[Result], args, llm_model: str | None) -> Path:
+    """Write the measured comparison where the dashboard can serve it.
+
+    The dashboard must never carry these numbers as literals: a hardcoded
+    benchmark is a claim, and it silently goes stale the moment the policy or the
+    model changes. Writing the artifact here means what a judge sees on screen is
+    the output of a run that actually happened, timestamped and reproducible from
+    the command recorded alongside it.
+    """
+    payload = {
+        "measured_at": datetime.now(timezone.utc).isoformat(),
+        "date": args.date,
+        "decide_every": args.decide_every,
+        "building_model": args.model,
+        "llm_model": llm_model,
+        "command": (
+            f"python scripts/compare_policies.py --date {args.date} "
+            f"--decide-every {args.decide_every}"
+        ),
+        "results": [
+            {
+                "label": result.label,
+                "cooling_kwh": result.cooling_kwh,
+                "lighting_kwh": result.lighting_kwh,
+                "fans_kwh": result.fans_kwh,
+                "total_kwh": result.total_kwh,
+                "mean_setpoint_c": result.mean_setpoint_c,
+                "mean_occupied_pmv": result.mean_occupied_pmv,
+                "uncomfortable_pct": result.uncomfortable_pct,
+                "decisions": result.decisions,
+                "fallbacks": result.fallbacks,
+                "clamped": result.clamped,
+            }
+            for result in results
+        ],
+    }
+
+    DOCS_DIR.mkdir(parents=True, exist_ok=True)
+    path = DOCS_DIR / "benchmark.json"
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return path
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", default=DEFAULT_MODEL_NAME)
@@ -264,6 +310,8 @@ def main() -> int:
             return 1
 
     print_table(results)
+
+    saved = save_benchmark(results, args, args.llm_model if llm else None)
 
     baseline = results[0]
     print()
