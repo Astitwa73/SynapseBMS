@@ -1,0 +1,12 @@
+# Tooling for the submission package only -- screenshots and the idea deck.
+# Not needed to run the building, the agent or the dashboard.
+#
+#   python -m pip install -r requirements-docs.txt
+#   python -m playwright install chromium
+#
+#   python scripts/capture_screenshots.py   # needs the backend running
+#   python scripts/deck/build_deck.py
+
+playwright==1.61.0
+python-pptx==1.0.2
+pillow==12.3.0
