@@ -1,5 +1,9 @@
 # SynapseBMS — Autonomous Building Management System
 
+
+https://github.com/user-attachments/assets/adbbbc40-c94a-43b3-bd16-0ce45030469f
+
+
 An AI agent that reads live sensor data from an EnergyPlus building simulation,
 reasons about building state, and writes control decisions back into the running
 simulation — closing the loop the way a supervisory BMS layer does.
