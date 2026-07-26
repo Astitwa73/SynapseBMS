@@ -1,7 +1,12 @@
+# Python
 __pycache__/
 *.py[cod]
+*.egg-info/
 .venv/
 venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
 # EnergyPlus run artifacts
 eplusout.*
@@ -9,11 +14,30 @@ eplustbl.*
 sqlite.err
 run_output/
 
-node_modules/
-frontend/dist/
-.env
-
 # Frontend
+node_modules/
 frontend/node_modules/
 frontend/dist/
+# Built dashboard: produced by `npm run build`, served by FastAPI
 backend/api/static/
+
+# Secrets and local tool configuration
+.env
+.env.*
+.claude/
+
+# Office lock/recovery files, left behind whenever the deck is open
+~$*.pptx
+~$*.docx
+~$*.xlsx
+
+# Editors and OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Logs and scratch
+*.log
+scratch_*/
