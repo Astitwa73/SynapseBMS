@@ -1,0 +1,18 @@
+# Normalise text to LF in the repository; Git checks out the platform's native
+# ending. Without this, a Windows-only contributor commits CRLF and every file
+# reads as fully rewritten on a Linux clone.
+* text=auto eol=lf
+
+# Binary and generated: never diff, never normalise.
+*.png       binary
+*.jpg       binary
+*.svg       text eol=lf
+*.pptx      binary
+*.idf       text eol=lf -diff
+
+package-lock.json  -diff linguist-generated
+docs/screenshots/* linguist-documentation
+
+# The building model is data, not source; it dwarfs the codebase in the
+# language breakdown otherwise.
+models/*    linguist-vendored
