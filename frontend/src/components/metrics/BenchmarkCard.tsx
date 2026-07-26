@@ -52,7 +52,7 @@ export function BenchmarkCard({ benchmark }: { benchmark: Benchmark | null }) {
     : 0;
 
   return (
-    <div className="flex h-full flex-col gap-1.5 overflow-y-auto">
+    <div className="flex h-full flex-col gap-2">
       <div className="flex items-center gap-3 rounded border border-ok/30 bg-ok-tint px-3 py-1.5">
         <div className="shrink-0">
           <div className="flex items-baseline gap-1.5">
@@ -161,14 +161,14 @@ function Row({
 
   return (
     <tr className="border-b border-line/60 last:border-0">
-      <td className="px-1 py-0.5 text-faint">
+      <td className="px-1 py-1 text-faint">
         {label}
         {unit && <span className="ml-0.5 text-[10px]">({unit})</span>}
       </td>
       {values.map((value, index) => (
         <td
           key={results[index].label}
-          className={`tabular px-1 py-0.5 text-right font-semibold ${
+          className={`tabular px-1 py-1 text-right font-semibold ${
             bestValue !== null && value === bestValue ? "text-ok" : "text-ink"
           }`}
         >

@@ -89,10 +89,10 @@ export default function App() {
   }, []);
 
   return (
-    // Viewport-locked on a real screen: panels scroll internally, the page does
-    // not. On a small window that would crush every row to a sliver, so below lg
-    // the page scrolls instead -- a scrollbar beats unreadable content.
-    <div className="flex min-h-screen flex-col gap-1.5 p-1.5 lg:h-screen lg:overflow-hidden">
+    // The page scrolls rather than the panels. Forcing this much content into
+    // one viewport left the validation pipeline and the benchmark clipped, and a
+    // clipped panel communicates nothing. Sized for a real browser viewport.
+    <div className="flex min-h-screen flex-col gap-2 p-2">
       <Header
         metrics={metrics}
         status={stream.status}
@@ -116,7 +116,7 @@ export default function App() {
         estimatedSavingPct={estimatedSavingPct(report)}
       />
 
-      <div className="grid min-h-[26rem] flex-1 grid-cols-1 gap-1.5 lg:min-h-0 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,0.9fr)]">
+      <div className="grid min-h-[46rem] grid-cols-1 gap-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)_minmax(0,0.95fr)]">
           <Card
             title="Digital twin"
             subtitle={
@@ -151,7 +151,7 @@ export default function App() {
           )}
         </Card>
 
-        <div className="flex min-h-0 flex-col gap-1.5">
+        <div className="flex min-h-0 flex-col gap-2">
           <Card
             title="Safety layer"
             active={cycle.phase === "validate"}
@@ -168,7 +168,7 @@ export default function App() {
           <Card
             title="Decision audit trail"
             subtitle={`${stream.decisions.length} recorded`}
-            className="h-44 shrink-0"
+            className="h-56 shrink-0"
           >
             <DecisionTimeline decisions={stream.decisions} />
           </Card>
@@ -177,7 +177,7 @@ export default function App() {
 
       {/* A wide table and a wide pipeline both suit a full-width strip; stacking
           the benchmark above the floor plan squeezed both into unreadable boxes. */}
-      <div className="grid shrink-0 grid-cols-1 gap-1.5 lg:max-h-48 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.1fr)]">
+      <div className="grid min-h-[15rem] grid-cols-1 gap-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.15fr)]">
         <Card title="System pipeline" className="min-h-0">
           <SystemPipeline phase={cycle.phase} />
         </Card>

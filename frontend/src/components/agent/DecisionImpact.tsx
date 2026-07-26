@@ -47,7 +47,7 @@ export function DecisionImpact({
   const tone = ACTION_TONE[decision.action] ?? ACTION_TONE.hold;
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-2 overflow-y-auto">
+    <div className="flex h-full flex-col gap-2.5">
       <Section label="Current objective" basis={BASIS.objective}>
         <p className="text-sm font-semibold leading-snug text-ink">
           {decision.objective ?? "—"}

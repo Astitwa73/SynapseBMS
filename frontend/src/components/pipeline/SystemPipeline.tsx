@@ -65,7 +65,7 @@ const STAGES: Stage[] = [
 export function SystemPipeline({ phase }: { phase: CyclePhase }) {
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-stretch gap-1.5 overflow-x-auto pb-1">
+      <div className="flex flex-wrap items-stretch gap-1.5 pb-1">
         {STAGES.map((stage, index) => (
           <PipelineStage
             key={stage.id}
@@ -76,14 +76,14 @@ export function SystemPipeline({ phase }: { phase: CyclePhase }) {
         ))}
       </div>
 
-      <div className="flex items-center gap-2 pl-1">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pl-1">
         <ReturnPath />
         <span className="text-[10px] uppercase tracking-[0.08em] text-faint">
           Control writes back into EnergyPlus — the loop is closed
         </span>
-        <span className="ml-auto flex items-center gap-1.5 rounded border border-line bg-sunken px-1.5 py-0.5 text-[10px] text-muted">
+        <span className="flex items-center gap-1.5 rounded border border-line bg-sunken px-1.5 py-0.5 text-[10px] text-muted">
           <span className="h-1 w-1 rounded-full bg-info" />
-          MCP exposes the same state and control path to external clients
+          MCP: same state, same control path
         </span>
       </div>
     </div>
@@ -102,7 +102,7 @@ function PipelineStage({
   const isActive = stage.activeDuring.includes(phase);
 
   return (
-    <div className="flex flex-1 items-center gap-1.5" title={stage.detail}>
+    <div className="flex min-w-[8.5rem] flex-1 items-center gap-1.5" title={stage.detail}>
       <motion.div
         animate={{
           backgroundColor: isActive ? "var(--color-brand-tint)" : "var(--color-surface)",

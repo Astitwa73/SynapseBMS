@@ -61,20 +61,35 @@ export function SafetyLayer({
   const clamped = (passage?.adjustments.length ?? 0) > 0;
 
   return (
-    <div className="flex h-full flex-col gap-2 overflow-y-auto">
+    <div className="flex h-full flex-col gap-3">
       {passage ? (
         <>
-          <div className="flex items-stretch gap-1.5">
-            <Node label="Requested" value={number(passage.requested, 1, "°C")} tone="neutral" />
-            <Connector active={active} clamped={clamped} />
+          <div className="flex flex-col">
             <Node
-              label="Validated"
-              value={clamped ? "adjusted" : "within limits"}
+              label="Requested"
+              value={number(passage.requested, 1, "°C")}
+              tone="neutral"
+              note={`from ${passage.origin}`}
+            />
+            <Arrow clamped={clamped} active={active} />
+            <Node
+              label="Safety validation"
+              value={clamped ? "Adjusted" : "Within limits"}
               tone={clamped ? "warn" : "ok"}
               pulse={active}
+              note={
+                clamped
+                  ? `${passage.adjustments.length} rule${passage.adjustments.length > 1 ? "s" : ""} applied`
+                  : "bounds · deadband · rate limit"
+              }
             />
-            <Connector active={active} clamped={clamped} />
-            <Node label="Applied" value={number(passage.applied, 1, "°C")} tone="ok" />
+            <Arrow clamped={clamped} active={active} />
+            <Node
+              label="Applied"
+              value={number(passage.applied, 1, "°C")}
+              tone="ok"
+              note="written to the actuators"
+            />
           </div>
 
           <AnimatePresence mode="popLayout">
@@ -100,9 +115,7 @@ export function SafetyLayer({
             </p>
           )}
 
-          <p className="text-[11px] text-faint">
-            Origin: <span className="font-medium text-muted">{passage.origin}</span>
-          </p>
+
         </>
       ) : (
         <p className="text-xs text-faint">No command has passed through yet.</p>
@@ -118,11 +131,13 @@ function Node({
   label,
   value,
   tone,
+  note,
   pulse = false,
 }: {
   label: string;
   value: string;
   tone: "neutral" | "ok" | "warn";
+  note?: string;
   pulse?: boolean;
 }) {
   const styles = {
@@ -133,36 +148,33 @@ function Node({
 
   return (
     <motion.div
-      animate={pulse ? { scale: [1, 1.02, 1] } : { scale: 1 }}
+      animate={pulse ? { scale: [1, 1.015, 1] } : { scale: 1 }}
       transition={{ duration: 0.6 }}
-      className={`flex-1 rounded border px-2 py-1.5 text-center ${styles[tone]}`}
+      className={`flex items-baseline gap-2 rounded border px-3 py-2 ${styles[tone]}`}
     >
-      <div className="text-[9px] font-semibold uppercase tracking-[0.08em] opacity-70">
-        {label}
+      <div className="min-w-0">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.08em] opacity-70">
+          {label}
+        </div>
+        {note && <div className="truncate text-[10px] opacity-60">{note}</div>}
       </div>
-      <div className="tabular mt-0.5 text-sm font-bold">{value}</div>
+      <div className="tabular ml-auto shrink-0 text-xl font-bold leading-none">{value}</div>
     </motion.div>
   );
 }
 
-function Connector({ active, clamped }: { active: boolean; clamped: boolean }) {
+function Arrow({ clamped, active }: { clamped: boolean; active: boolean }) {
   return (
-    <svg width="16" height="40" viewBox="0 0 16 40" className="shrink-0 self-center">
+    <svg width="100%" height="18" viewBox="0 0 20 18" preserveAspectRatio="none" aria-hidden="true">
       <line
-        x1="0"
-        y1="20"
-        x2="12"
-        y2="20"
-        strokeWidth="1.5"
-        strokeLinecap="round"
+        x1="10" y1="0" x2="10" y2="13"
+        strokeWidth="1.2" strokeLinecap="round"
+        vectorEffect="non-scaling-stroke"
         className={`${clamped ? "stroke-warn" : "stroke-line-strong"} ${active ? "animate-flow" : ""}`}
       />
       <path
-        d="M9 17 L12 20 L9 23"
-        fill="none"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
+        d="M7.5 10.5 L10 13.5 L12.5 10.5" fill="none" strokeWidth="1.2"
+        strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke"
         className={clamped ? "stroke-warn" : "stroke-line-strong"}
       />
     </svg>
